@@ -3,7 +3,7 @@
 
 ## WHAT YOU HAVE: A complete, tested campaign governance engine
 
-89 files, 12 clean commits, 58 tests, 29 API endpoints, 13 packages, 10 n8n workflows.
+89 files, 12 clean commits, 58 tests, 31 API endpoints, 13 packages, 10 n8n workflows.
 ~3,300 lines of Python. All tests pass. Medium policy calibrated.
 
 ---
@@ -171,7 +171,7 @@ Once deployed, your daily workflow becomes:
 
 ## BOTTOM LINE
 
-**The kernel is done.** 89 files, 58 passing tests, 13 packages, 10 workflows.
+**The kernel is done.** 89 files, 58 passing tests, 13 packages, 11 workflows.
 
 What remains isn't more code — it's 6 configuration steps totaling ~2 hours.
 

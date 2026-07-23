@@ -15,7 +15,7 @@
 | API | B+ | 29 endpoints; missing Supabase-backed GET endpoints |
 | Tests | B | 58 tests pass; coverage gaps in edge cases |
 | Deployment | A- | Playbook complete; n8n auto-import script untested against live n8n |
-| Git | A | 12 clean commits, 89 files tracked |
+| Git | A | 12 clean commits, 97 files tracked |
 
 ### FIXES APPLIED IN THIS AUDIT
 
