@@ -53,10 +53,13 @@ python tests/test_reply_classifier.py 2>&1 | tail -1
 python tests/test_experiments.py 2>&1 | tail -1
 [ ${PIPESTATUS[0]} -eq 0 ] && pass "Experiments (12 tests)" || fail "Experiment tests failed"
 
+python tests/test_governance.py 2>&1 | tail -1
+[ ${PIPESTATUS[0]} -eq 0 ] && pass "Governance (22 tests)" || fail "Governance tests failed"
+
 python tests/test_integration.py 2>&1 | tail -1
 [ ${PIPESTATUS[0]} -eq 0 ] && pass "Integration (8 suites)" || fail "Integration tests failed"
 
-echo -e "  ${BOLD}${GREEN}All 58 tests passed${RESET}"
+echo -e "  ${BOLD}${GREEN}All 80 tests passed${RESET}"
 fi
 
 # ──── 3. API syntax check ───────────────────────────────────────────
