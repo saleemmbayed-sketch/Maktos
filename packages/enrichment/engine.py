@@ -121,7 +121,7 @@ class EnrichmentPipeline:
         import httpx
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(
-                "https://api.firecrawl.dev/v1/scrape",
+                "https://api.firecrawl.dev/v2/scrape",
                 headers={"Authorization": f"Bearer {self.firecrawl_key}"},
                 json={"url": f"https://{domain}", "formats": ["markdown"]},
             )

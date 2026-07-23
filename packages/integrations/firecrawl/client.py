@@ -17,7 +17,7 @@ import httpx
 class FirecrawlClient:
     """Firecrawl API client for website scraping and enrichment."""
 
-    BASE_URL = "https://api.firecrawl.dev/v1"
+    BASE_URL = "https://api.firecrawl.dev/v2"
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.getenv("FIRECRAWL_API_KEY", "")
