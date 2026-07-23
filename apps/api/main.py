@@ -477,12 +477,35 @@ class EnrichRequest(BaseModel):
 async def enrich_company(request: EnrichRequest):
     """Enrich a company profile using Firecrawl and other sources."""
     from enrichment.engine import EnrichmentPipeline
+    from integrations.firecrawl import FirecrawlClient
     pipeline = EnrichmentPipeline()
     profile = pipeline.enrich_company(
         domain=request.domain,
         company_name=request.company_name,
     )
     brief = pipeline.generate_personalization_brief(profile)
+    firecrawl_signals = None
+    if "firecrawl" in request.sources:
+        client = FirecrawlClient()
+        if client.api_key:
+            try:
+                firecrawl_signals = await client.extract_company_signals(request.domain)
+            except Exception as exc:
+                firecrawl_signals = {
+                    "domain": request.domain,
+                    "scrape_successful": False,
+                    "source": "firecrawl",
+                    "error": str(exc)[:200],
+                }
+            finally:
+                await client.close()
+        else:
+            firecrawl_signals = {
+                "domain": request.domain,
+                "scrape_successful": False,
+                "source": "firecrawl",
+                "error": "FIRECRAWL_API_KEY not configured",
+            }
     return {
         "domain": request.domain,
         "profile": {
@@ -496,6 +519,7 @@ async def enrich_company(request: EnrichRequest):
             "trigger": brief.relevant_trigger,
             "icebreaker": brief.icebreaker,
         },
+        "firecrawl_signals": firecrawl_signals,
         "sources": [s.provider for s in profile.sources],
     }
 
