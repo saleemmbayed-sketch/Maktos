@@ -39,6 +39,17 @@ class PersistedMessageDecisionResult:
     executable: bool
 
 
+@dataclass
+class MessageSendGateResult:
+    asset_id: str
+    campaign_id: str
+    authorized: bool
+    executable: bool
+    blockers: list[str]
+    provider: str
+    provider_payload: dict
+
+
 async def approve_campaign_for_review(
     db,
     campaign_id: UUID,
@@ -281,4 +292,105 @@ async def approve_message_asset_for_send_gate(
         reviewer=after["reviewer"],
         comments=after["comments"],
         executable=False,
+    )
+
+
+async def evaluate_message_send_gate(
+    db,
+    asset_id: UUID,
+    provider: str,
+    provider_campaign_id: str,
+    recipient: dict,
+    actor_id: str = "n8n_send_gate_preview",
+) -> MessageSendGateResult:
+    """Evaluate final message send eligibility and build provider payload.
+
+    This is a preview/authorization gate only. It does not call any provider.
+    """
+    asset = await db.fetchrow(
+        """
+        SELECT ca.id, ca.campaign_id, ca.channel, ca.content, ca.approval_status,
+               c.status AS campaign_status
+        FROM campaign_assets ca
+        JOIN campaigns c ON c.id = ca.campaign_id
+        WHERE ca.id = $1
+        """,
+        asset_id,
+    )
+    if not asset:
+        raise ValueError(f"No message asset found for asset_id={asset_id}")
+
+    approval = await db.fetchrow(
+        """
+        SELECT status
+        FROM approvals
+        WHERE entity_type = 'message' AND entity_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        asset_id,
+    )
+    compliance = await db.fetchrow(
+        """
+        SELECT status, review_required
+        FROM compliance_checks
+        WHERE asset_id = $1
+        ORDER BY checked_at DESC
+        LIMIT 1
+        """,
+        asset_id,
+    )
+
+    blockers = []
+    if asset["campaign_status"] != "draft":
+        blockers.append(f"Campaign status must be draft at send gate; got {asset['campaign_status']}")
+    if asset["approval_status"] != "approved":
+        blockers.append(f"Message asset approval_status is {asset['approval_status']}, not approved")
+    if not approval or approval["status"] != "approved":
+        blockers.append("Message human approval is not approved")
+    if not compliance or compliance["status"] != "approved":
+        blockers.append("Message compliance status is not approved")
+    if not recipient.get("email"):
+        blockers.append("Recipient email is required")
+    if not provider_campaign_id:
+        blockers.append("Provider campaign ID is required")
+
+    provider_payload = {
+        "provider": provider,
+        "campaign_id": provider_campaign_id,
+        "email": recipient.get("email", ""),
+        "first_name": recipient.get("first_name", ""),
+        "last_name": recipient.get("last_name", ""),
+        "company_name": recipient.get("company_name", ""),
+        "custom_fields": {
+            "campaignops_asset_id": str(asset_id),
+            "campaignops_campaign_id": str(asset["campaign_id"]),
+            "message_body": asset["content"],
+        },
+    }
+    authorized = not blockers
+    await db.execute(
+        """
+        INSERT INTO audit_log (actor_type, actor_id, action, entity_type, entity_id, after_json)
+        VALUES ('n8n_workflow', $1, 'message_send_gate_evaluated', 'message', $2, to_jsonb($3::json))
+        """,
+        actor_id,
+        asset_id,
+        json.dumps({
+            "authorized": authorized,
+            "executable": False,
+            "blockers": blockers,
+            "provider": provider,
+            "provider_campaign_id": provider_campaign_id,
+        }),
+    )
+
+    return MessageSendGateResult(
+        asset_id=str(asset_id),
+        campaign_id=str(asset["campaign_id"]),
+        authorized=authorized,
+        executable=False,
+        blockers=blockers,
+        provider=provider,
+        provider_payload=provider_payload,
     )

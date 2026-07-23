@@ -38,7 +38,11 @@ from approval.queue import (
     requires_approval as check_requires_approval,
 )
 from approval.readiness import evaluate_campaign_readiness
-from approval.persistence import approve_message_asset_for_send_gate, persist_message_for_approval
+from approval.persistence import (
+    approve_message_asset_for_send_gate,
+    evaluate_message_send_gate,
+    persist_message_for_approval,
+)
 from reply_classifier.classifier import (
     classify_reply, deterministic_classify,
     get_recommended_action, requires_special_handling,
@@ -288,6 +292,13 @@ class MessageApprovalDecisionRequest(BaseModel):
     reviewer: str = "operator"
     comments: str = "Approved for send gate. No send action performed."
 
+
+class MessageSendGateRequest(BaseModel):
+    provider: str = "smartlead"
+    provider_campaign_id: str = ""
+    recipient: dict
+    actor_id: str = "n8n_send_gate_preview"
+
 @app.post("/compliance/check", response_model=ComplianceResult)
 def check_compliance(request: ComplianceRequest):
     return run_compliance_checks(
@@ -382,6 +393,36 @@ async def approve_message_asset(asset_id: UUID, request: MessageApprovalDecision
         "reviewer": result.reviewer,
         "comments": result.comments,
         "executable": result.executable,
+    }
+
+
+@app.post("/messages/{asset_id}/send-gate")
+async def message_send_gate(asset_id: UUID, request: MessageSendGateRequest):
+    """Evaluate final send eligibility and build provider payload without sending."""
+    from shared.database import get_db
+
+    db = await get_db()
+    try:
+        result = await evaluate_message_send_gate(
+            db=db,
+            asset_id=asset_id,
+            provider=request.provider,
+            provider_campaign_id=request.provider_campaign_id,
+            recipient=request.recipient,
+            actor_id=request.actor_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    return {
+        "asset_id": result.asset_id,
+        "campaign_id": result.campaign_id,
+        "authorized": result.authorized,
+        "executable": result.executable,
+        "blockers": result.blockers,
+        "provider": result.provider,
+        "provider_payload": result.provider_payload,
+        "note": "Send gate only. No provider call was made.",
     }
 
 

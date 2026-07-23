@@ -12,6 +12,7 @@ sys.path.insert(0, str(REPO_ROOT / "packages"))
 from approval.persistence import (
     approve_campaign_for_review,
     approve_message_asset_for_send_gate,
+    evaluate_message_send_gate,
     persist_message_for_approval,
 )
 
@@ -113,6 +114,36 @@ class FakeMessageDecisionDb:
         return "OK"
 
 
+class FakeSendGateDb:
+    def __init__(self, approved=True):
+        self.asset_id = uuid4()
+        self.campaign_id = uuid4()
+        self.approved = approved
+        self.fetchrow_calls = []
+        self.execute_calls = []
+
+    async def fetchrow(self, query, *args):
+        self.fetchrow_calls.append((query, args))
+        if "FROM campaign_assets" in query:
+            return {
+                "id": self.asset_id,
+                "campaign_id": self.campaign_id,
+                "channel": "cold_email",
+                "content": "Subject: Test\n\nBody",
+                "approval_status": "approved" if self.approved else "needs_review",
+                "campaign_status": "draft",
+            }
+        if "FROM approvals" in query:
+            return {"status": "approved" if self.approved else "pending"}
+        if "FROM compliance_checks" in query:
+            return {"status": "approved" if self.approved else "blocked", "review_required": False}
+        return None
+
+    async def execute(self, query, *args):
+        self.execute_calls.append((query, args))
+        return "OK"
+
+
 def test_approve_campaign_for_review_updates_approval_and_audits():
     db = FakeDb()
 
@@ -174,3 +205,42 @@ def test_approve_message_asset_for_send_gate_updates_approval_asset_and_audit():
     assert len(db.execute_calls) == 2
     assert "UPDATE campaign_assets" in db.execute_calls[0][0]
     assert "message_asset_approved_for_send_gate" in db.execute_calls[1][0]
+
+
+def test_evaluate_message_send_gate_authorizes_approved_asset_without_sending():
+    db = FakeSendGateDb(approved=True)
+
+    result = asyncio.run(
+        evaluate_message_send_gate(
+            db=db,
+            asset_id=db.asset_id,
+            provider="smartlead",
+            provider_campaign_id="provider-campaign-1",
+            recipient={"email": "buyer@example.com", "first_name": "Taylor"},
+        )
+    )
+
+    assert result.authorized is True
+    assert result.executable is False
+    assert result.blockers == []
+    assert result.provider_payload["email"] == "buyer@example.com"
+    assert result.provider_payload["custom_fields"]["campaignops_asset_id"] == str(db.asset_id)
+    assert "message_send_gate_evaluated" in db.execute_calls[0][0]
+
+
+def test_evaluate_message_send_gate_blocks_unapproved_asset():
+    db = FakeSendGateDb(approved=False)
+
+    result = asyncio.run(
+        evaluate_message_send_gate(
+            db=db,
+            asset_id=db.asset_id,
+            provider="smartlead",
+            provider_campaign_id="provider-campaign-1",
+            recipient={"email": "buyer@example.com"},
+        )
+    )
+
+    assert result.authorized is False
+    assert result.executable is False
+    assert "Message human approval is not approved" in result.blockers
