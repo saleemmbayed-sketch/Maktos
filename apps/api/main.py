@@ -409,6 +409,48 @@ def get_campaign_metrics(campaign_id: UUID):
         "tip": "Connect Metabase/Retool to Supabase for full dashboards",
     }
 
+
+# ═══════════════════════════════════════════════════════════════════
+# PARDOT SYNC (Phase B/C — replaces HubSpot)
+# ═══════════════════════════════════════════════════════════════════
+
+class PardotSyncRequest(BaseModel):
+    lead_id: UUID
+    email: str
+    first_name: str = ""
+    last_name: str = ""
+    company_name: str = ""
+    title: str = ""
+    lead_score: int = 0
+    tier: Optional[str] = None
+    action: str = "upsert"  # upsert | add_to_nurture | log_activity
+
+@app.post("/pardot/sync")
+def sync_to_pardot(request: PardotSyncRequest):
+    """Sync a lead to Pardot.
+    
+    In production: calls PardotClient.create_or_update_prospect().
+    Currently returns the mapped payload for n8n to use.
+    """
+    from integrations.pardot.client import map_campaignops_lead_to_pardot
+    
+    prospect = map_campaignops_lead_to_pardot({
+        "email": request.email,
+        "first_name": request.first_name,
+        "last_name": request.last_name,
+        "company_name": request.company_name,
+        "title": request.title,
+        "lead_score": request.lead_score,
+    })
+    prospect["campaignops_tier"] = request.tier
+    prospect["campaignops_status"] = request.action
+    
+    return {
+        "action": request.action,
+        "pardot_prospect": prospect,
+        "note": "Use this payload with Pardot REST API v5: POST /objects/prospects",
+    }
+
 # ═══════════════════════════════════════════════════════════════════
 # DASHBOARD
 # ═══════════════════════════════════════════════════════════════════

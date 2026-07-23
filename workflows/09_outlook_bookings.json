@@ -1,0 +1,57 @@
+{
+  "name": "CampaignOps: Outlook Bookings Webhook",
+  "version": "1.0",
+  "trigger": "Webhook from Microsoft Graph (booking created)",
+  "description": "Booking created in Outlook Bookings → match email to lead → update status to 'booked' → resolve SLA → log audit",
+  "nodes": [
+    {
+      "id": "trigger",
+      "type": "n8n-nodes-base.webhook",
+      "name": "Bookings Webhook",
+      "parameters": {"httpMethod": "POST", "path": "bookings/created"}
+    },
+    {
+      "id": "extract_email",
+      "type": "n8n-nodes-base.code",
+      "name": "Extract Booking Email",
+      "parameters": {
+        "jsCode": "const notifications = $input.item.json.value || [];\nfor (const n of notifications) {\n  const data = n.resourceData || {};\n  const email = data.customerEmailAddress || '';\n  if (!email) continue;\n  return [{\n    json: {\n      event_type: 'booking_created',\n      customer_email: email.toLowerCase().trim(),\n      customer_name: data.customerName || '',\n      service_name: data.serviceName || '',\n      booking_time: data.startDateTime || ''\n    }\n  }];\n}\nreturn [];"
+      }
+    },
+    {
+      "id": "find_lead",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Find Lead by Email",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT l.id, l.status FROM leads l JOIN contacts c ON l.contact_id = c.id WHERE LOWER(c.email) = LOWER('{{ $json.customer_email }}') AND l.status IN ('in_sequence', 'replied', 'approved') LIMIT 1"
+      }
+    },
+    {
+      "id": "booked",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Update Lead → Booked + Resolve SLA",
+      "parameters": {
+        "operation": "update",
+        "tableId": "leads",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {"values": {"id": "={{ $json[0].id }}", "status": "booked"}}
+      }
+    },
+    {
+      "id": "notify",
+      "type": "n8n-nodes-base.emailSend",
+      "name": "Notify Owner",
+      "parameters": {
+        "to": "{{ $env.CAMPAIGN_OWNER_EMAIL }}",
+        "subject": "Demo Booked!",
+        "text": "{{ $json.customer_name }} booked {{ $json.service_name }} at {{ $json.booking_time }}."
+      }
+    }
+  ],
+  "connections": {
+    "trigger": {"main": [["extract_email"]]},
+    "extract_email": {"main": [["find_lead"]]},
+    "find_lead": {"main": [["booked", "notify"]]}
+  }
+}
