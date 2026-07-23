@@ -23,6 +23,11 @@
       "type": "remote",
       "url": "https://mcp.firecrawl.dev/v2/mcp",
       "enabled": true
+    },
+    "n8n": {
+      "type": "remote",
+      "url": "https://saleems.app.n8n.cloud/mcp-server/http",
+      "enabled": true
     }
   }
 }

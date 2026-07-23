@@ -4,6 +4,9 @@
 Usage:
   N8N_URL=http://localhost:5678 N8N_API_KEY=n8n_api_... python deploy/import_n8n_workflows.py
 
+Offline export for manual n8n UI import:
+  FASTAPI_URL=https://your-api-url N8N_EXPORT_DIR=.n8n-live python deploy/import_n8n_workflows.py
+
 Removes the manual UI import step from the deployment playbook.
 Each workflow is imported, nodes updated with the provided FASTAPI_URL,
 and optionally activated.
@@ -35,6 +38,8 @@ WORKFLOW_NAMES = [
 
 BOLD = "\033[1m"; GREEN = "\033[92m"; YELLOW = "\033[93m"
 RED = "\033[91m"; RESET = "\033[0m"
+OK = "OK"
+FAIL = "FAIL"
 
 
 def parse_workflow_json(path: Path) -> dict:
@@ -114,23 +119,23 @@ async def import_all_workflows(
                 if resp.status_code in (200, 201):
                     wf_id = resp.json().get("id", "?")
                     results[name] = "imported"
-                    
+
                     # Optionally activate
                     if activate:
                         await client.patch(
                             f"/api/v1/workflows/{wf_id}",
                             json={"active": True},
                         )
-                        print(f"  {GREEN}✓{RESET} {name} → imported + ACTIVE (id={wf_id})")
+                        print(f"  {GREEN}{OK}{RESET} {name} imported + ACTIVE (id={wf_id})")
                     else:
-                        print(f"  {GREEN}✓{RESET} {name} → imported (id={wf_id}, inactive)")
+                        print(f"  {GREEN}{OK}{RESET} {name} imported (id={wf_id}, inactive)")
                 else:
                     error = resp.text[:100]
-                    print(f"  {RED}✗{RESET} {name}: HTTP {resp.status_code} — {error}")
+                    print(f"  {RED}{FAIL}{RESET} {name}: HTTP {resp.status_code} - {error}")
                     results[name] = f"error_{resp.status_code}"
-                    
+
             except Exception as e:
-                print(f"  {RED}✗{RESET} {name}: {e}")
+                print(f"  {RED}{FAIL}{RESET} {name}: {e}")
                 results[name] = f"error: {e}"
     
     return results
@@ -141,13 +146,13 @@ def print_summary(results: dict):
     imported = sum(1 for v in results.values() if v == "imported")
     failed = len(results) - imported
     
-    print(f"\n{BOLD}{'─'*50}{RESET}")
+    print(f"\n{BOLD}{'-'*50}{RESET}")
     print(f"  Imported: {GREEN}{imported}{RESET}")
     if failed:
         print(f"  Failed:   {RED}{failed}{RESET}")
     else:
         print(f"  Failed:   0")
-    print(f"{BOLD}{'─'*50}{RESET}")
+    print(f"{BOLD}{'-'*50}{RESET}")
     
     if imported == len(WORKFLOW_NAMES):
         print(f"\n  {GREEN}All {len(WORKFLOW_NAMES)} workflows imported.{RESET}")
@@ -159,20 +164,58 @@ def print_summary(results: dict):
         print(f"\n  {RED}Nothing imported. Check n8n URL, API key, and network.{RESET}")
 
 
+def export_workflows(fastapi_url: str, export_dir: str) -> dict:
+    """Write normalized workflow JSON files for manual n8n UI import."""
+    out_dir = Path(export_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    results = {}
+    for name in WORKFLOW_NAMES:
+        path = WORKFLOW_DIR / f"{name}.json"
+        if not path.exists():
+            print(f"  {RED}{FAIL}{RESET} {name}: file not found")
+            results[name] = "missing"
+            continue
+
+        workflow = parse_workflow_json(path)
+        workflow["nodes"] = update_fastapi_url(workflow["nodes"], fastapi_url)
+        workflow["active"] = False
+
+        output_path = out_dir / f"{name}.json"
+        output_path.write_text(json.dumps(workflow, indent=2), encoding="utf-8")
+        print(f"  {GREEN}{OK}{RESET} {name} -> {output_path}")
+        results[name] = "exported"
+
+    return results
+
+
 async def main():
     n8n_url = os.getenv("N8N_URL", "http://localhost:5678")
     api_key = os.getenv("N8N_API_KEY", "")
     fastapi_url = os.getenv("FASTAPI_URL", "http://localhost:8000")
     activate = os.getenv("N8N_ACTIVATE_WORKFLOWS", "false").lower() == "true"
-    
+    export_dir = os.getenv("N8N_EXPORT_DIR", "")
+
+    if export_dir:
+        print(f"\n{BOLD}CampaignOps Kernel - n8n Workflow Export{RESET}\n")
+        print(f"  Export dir:  {export_dir}")
+        print(f"  FastAPI URL: {fastapi_url}")
+        print(f"  Active:      False")
+        print(f"  Workflows:   {len(WORKFLOW_NAMES)}\n")
+        export_workflows(fastapi_url, export_dir)
+        print(f"\n  {GREEN}Export complete. Import these JSON files in n8n manually and keep them inactive.{RESET}")
+        return
+
     if not api_key:
         print(f"{RED}ERROR: N8N_API_KEY not set.{RESET}")
-        print("Get it from: n8n → Settings → API → Create API Key")
+        print("Get it from: n8n Settings > API > Create API Key")
+        print("Or export files for manual import:")
+        print("  FASTAPI_URL=https://your-api-url N8N_EXPORT_DIR=.n8n-live python deploy/import_n8n_workflows.py")
         print("\nUsage:")
         print("  N8N_URL=http://localhost:5678 N8N_API_KEY=n8n_api_... python deploy/import_n8n_workflows.py")
         sys.exit(1)
     
-    print(f"\n{BOLD}CampaignOps Kernel — n8n Workflow Import{RESET}\n")
+    print(f"\n{BOLD}CampaignOps Kernel - n8n Workflow Import{RESET}\n")
     print(f"  n8n URL:     {n8n_url}")
     print(f"  FastAPI URL: {fastapi_url}")
     print(f"  Activate:    {activate}")

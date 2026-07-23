@@ -12,3 +12,4 @@ build/
 node_modules/
 .DS_Store
 .railway/
+.n8n-live/
