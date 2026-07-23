@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Auto-import all 8 CampaignOps workflows into n8n via REST API.
+"""Auto-import CampaignOps workflows into n8n via REST API.
 
 Usage:
   N8N_URL=http://localhost:5678 N8N_API_KEY=n8n_api_... python deploy/import_n8n_workflows.py
@@ -30,6 +30,7 @@ WORKFLOW_NAMES = [
     "08_daily_summary",
     "09_outlook_bookings",
     "10_experiment_tracker",
+    "11_enrichment_pipeline",
 ]
 
 BOLD = "\033[1m"; GREEN = "\033[92m"; YELLOW = "\033[93m"
