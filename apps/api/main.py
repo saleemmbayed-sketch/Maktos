@@ -38,6 +38,7 @@ from approval.queue import (
     requires_approval as check_requires_approval,
 )
 from approval.readiness import evaluate_campaign_readiness
+from approval.persistence import persist_message_for_approval
 from reply_classifier.classifier import (
     classify_reply, deterministic_classify,
     get_recommended_action, requires_special_handling,
@@ -246,6 +247,22 @@ class ComplianceRequest(BaseModel):
     action: str = "send"
     ai_flags: Optional[list[str]] = None
 
+
+class PersistMessageApprovalRequest(BaseModel):
+    campaign_id: UUID
+    lead_id: Optional[UUID] = None
+    channel: ChannelType = ChannelType.COLD_EMAIL
+    persona: str = "unknown"
+    funnel_stage: str = "awareness"
+    subject: Optional[str] = None
+    message_body: str
+    contact_email: str = ""
+    contact_region: Optional[str] = None
+    contact_data_source: Optional[str] = None
+    suppression_emails: list[str] = []
+    signature_block: Optional[str] = None
+    actor_id: str = "n8n_pre_send_gate"
+
 @app.post("/compliance/check", response_model=ComplianceResult)
 def check_compliance(request: ComplianceRequest):
     return run_compliance_checks(
@@ -261,6 +278,61 @@ def check_compliance(request: ComplianceRequest):
         action=request.action,
         ai_flags=request.ai_flags,
     )
+
+
+@app.post("/messages/persist-for-approval")
+async def persist_message_approval(request: PersistMessageApprovalRequest):
+    """Persist a compliant message asset and pending human approval.
+
+    This endpoint never sends outreach and always returns executable=false.
+    """
+    compliance = run_compliance_checks(
+        lead_id=request.lead_id,
+        channel=request.channel,
+        message_body=request.message_body,
+        contact_email=request.contact_email,
+        contact_region=request.contact_region,
+        contact_data_source=request.contact_data_source,
+        suppression_emails=set(request.suppression_emails),
+        signature_block=request.signature_block,
+        action="send",
+    )
+    if compliance.status == ComplianceStatus.BLOCKED:
+        return {
+            "persisted": False,
+            "executable": False,
+            "compliance": compliance.model_dump(mode="json"),
+            "blockers": compliance.blocked_reasons,
+        }
+
+    from shared.database import get_db
+
+    db = await get_db()
+    content = request.message_body
+    if request.subject:
+        content = f"Subject: {request.subject}\n\n{request.message_body}"
+    result = await persist_message_for_approval(
+        db=db,
+        campaign_id=request.campaign_id,
+        content=content,
+        channel=request.channel.value,
+        persona=request.persona,
+        funnel_stage=request.funnel_stage,
+        compliance_status=compliance.status.value,
+        blocked_reasons=compliance.blocked_reasons,
+        review_required=compliance.review_required,
+        actor_id=request.actor_id,
+    )
+    return {
+        "persisted": True,
+        "campaign_id": result.campaign_id,
+        "asset_id": result.asset_id,
+        "approval_id": result.approval_id,
+        "compliance_status": result.compliance_status,
+        "approval_status": result.approval_status,
+        "executable": result.executable,
+        "compliance": compliance.model_dump(mode="json"),
+    }
 
 
 # ═══════════════════════════════════════════════════════════════════

@@ -19,6 +19,16 @@ class PersistedApprovalResult:
     comments: str
 
 
+@dataclass
+class PersistedMessageApprovalResult:
+    campaign_id: str
+    asset_id: str
+    approval_id: str
+    compliance_status: str
+    approval_status: str
+    executable: bool
+
+
 async def approve_campaign_for_review(
     db,
     campaign_id: UUID,
@@ -87,4 +97,92 @@ async def approve_campaign_for_review(
         status=after["status"],
         reviewer=after["reviewer"],
         comments=after["comments"],
+    )
+
+
+async def persist_message_for_approval(
+    db,
+    campaign_id: UUID,
+    content: str,
+    channel: str,
+    persona: str,
+    funnel_stage: str,
+    compliance_status: str,
+    blocked_reasons: list[str],
+    review_required: bool,
+    actor_id: str = "n8n_pre_send_gate",
+) -> PersistedMessageApprovalResult:
+    """Persist a message asset, compliance result, approval row, and audit entry.
+
+    This only prepares a message for human review. It does not approve or send.
+    """
+    campaign = await db.fetchrow(
+        "SELECT id, status FROM campaigns WHERE id = $1",
+        campaign_id,
+    )
+    if not campaign:
+        raise ValueError(f"No campaign found for campaign_id={campaign_id}")
+
+    asset = await db.fetchrow(
+        """
+        INSERT INTO campaign_assets (
+            campaign_id, asset_type, channel, persona, funnel_stage, content,
+            source_file, approval_status, risk_level
+        )
+        VALUES ($1, 'cold_email', $2, $3, $4, $5, 'n8n_pre_send_gate', $6, 'low')
+        RETURNING id, approval_status
+        """,
+        campaign_id,
+        channel,
+        persona,
+        funnel_stage,
+        content,
+        compliance_status,
+    )
+    await db.execute(
+        """
+        INSERT INTO compliance_checks (
+            asset_id, channel, status, blocked_reasons, review_required, checked_by
+        )
+        VALUES ($1, $2, $3, to_jsonb($4::json), $5, 'system')
+        """,
+        asset["id"],
+        channel,
+        compliance_status,
+        json.dumps(blocked_reasons),
+        review_required,
+    )
+    approval = await db.fetchrow(
+        """
+        INSERT INTO approvals (entity_type, entity_id, status, comments)
+        VALUES ('message', $1, 'pending', $2)
+        RETURNING id, status
+        """,
+        asset["id"],
+        "Message asset persisted for human approval. No send action performed.",
+    )
+    await db.execute(
+        """
+        INSERT INTO audit_log (actor_type, actor_id, action, entity_type, entity_id, after_json)
+        VALUES ('n8n_workflow', $1, 'message_asset_persisted_for_approval', 'message', $2, to_jsonb($3::json))
+        """,
+        actor_id,
+        asset["id"],
+        json.dumps({
+            "campaign_id": str(campaign_id),
+            "asset_id": str(asset["id"]),
+            "approval_id": str(approval["id"]),
+            "compliance_status": compliance_status,
+            "approval_status": approval["status"],
+            "executable": False,
+        }),
+    )
+
+    return PersistedMessageApprovalResult(
+        campaign_id=str(campaign_id),
+        asset_id=str(asset["id"]),
+        approval_id=str(approval["id"]),
+        compliance_status=compliance_status,
+        approval_status=approval["status"],
+        executable=False,
     )
