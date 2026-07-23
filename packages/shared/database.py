@@ -91,7 +91,7 @@ async def close_db():
         _db = None
 
 @asynccontextmanager
-async def db_lifespan():
+async def db_lifespan(app=None):
     await get_db()
     yield
     await close_db()
