@@ -28,6 +28,16 @@
       "type": "remote",
       "url": "https://saleems.app.n8n.cloud/mcp-server/http",
       "enabled": true
+    },
+    "smartlead": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "mcp-remote",
+        "https://mcp.smartlead.ai/sse?user_api_key={env:SMARTLEAD_API_KEY}"
+      ],
+      "enabled": true
     }
   }
 }
