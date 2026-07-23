@@ -52,6 +52,12 @@ def evaluate_campaign_readiness(
     if metrics.get("message_asset_count", 0) > 0 and approval and approval.get("status") != "approved":
         blockers.append("Message assets exist before campaign approval")
 
+    if metrics.get("pending_message_approval_count", 0) > 0:
+        blockers.append(f"{metrics['pending_message_approval_count']} message asset(s) are pending approval")
+
+    if metrics.get("rejected_message_approval_count", 0) > 0:
+        blockers.append(f"{metrics['rejected_message_approval_count']} message asset(s) have rejected approval")
+
     return CampaignReadinessResult(
         campaign_id=campaign_id,
         ready=not blockers,

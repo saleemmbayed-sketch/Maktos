@@ -66,11 +66,27 @@ async def collect_metrics(db, campaign_id: UUID) -> dict:
         campaign_id,
     )
     assets = await db.fetchrow(
-        "SELECT COUNT(*)::int AS count FROM campaign_assets WHERE campaign_id = $1",
+        """
+        SELECT
+            COUNT(*)::int AS count,
+            COUNT(*) FILTER (WHERE a.status = 'pending')::int AS pending_approval_count,
+            COUNT(*) FILTER (WHERE a.status = 'rejected')::int AS rejected_approval_count
+        FROM campaign_assets ca
+        LEFT JOIN LATERAL (
+            SELECT status
+            FROM approvals
+            WHERE entity_type = 'message' AND entity_id = ca.id
+            ORDER BY created_at DESC
+            LIMIT 1
+        ) a ON true
+        WHERE ca.campaign_id = $1
+        """,
         campaign_id,
     )
     metrics = dict(row or {})
     metrics["message_asset_count"] = assets["count"] if assets else 0
+    metrics["pending_message_approval_count"] = assets["pending_approval_count"] if assets else 0
+    metrics["rejected_message_approval_count"] = assets["rejected_approval_count"] if assets else 0
     return metrics
 
 

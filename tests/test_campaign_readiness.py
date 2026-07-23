@@ -21,6 +21,8 @@ class FakeReadinessDb:
         self.calls.append((query, args))
         if "FROM campaigns" in query:
             return {"id": self.campaign_id, "name": "Test Campaign", "status": "draft"}
+        if "FROM campaign_assets" in query:
+            return {"count": 0, "pending_approval_count": 0, "rejected_approval_count": 0}
         if "FROM approvals" in query:
             return {"id": uuid4(), "entity_type": "campaign", "status": "approved"}
         if "FROM leads" in query:
@@ -31,8 +33,6 @@ class FakeReadinessDb:
                 "missing_compliance_count": 0,
                 "blocked_compliance_count": 0,
             }
-        if "FROM campaign_assets" in query:
-            return {"count": 0}
         return None
 
 
@@ -88,6 +88,26 @@ def test_missing_compliance_blocks_readiness():
 
     assert result.ready is False
     assert "2 lead(s) are missing compliance checks" in result.blockers
+
+
+def test_pending_message_approval_blocks_readiness():
+    result = evaluate_campaign_readiness(
+        campaign={"id": str(uuid4()), "status": "draft"},
+        approval={"status": "approved"},
+        metrics={
+            "lead_count": 5,
+            "unscored_count": 0,
+            "unenriched_count": 0,
+            "missing_compliance_count": 0,
+            "blocked_compliance_count": 0,
+            "message_asset_count": 1,
+            "pending_message_approval_count": 1,
+            "rejected_message_approval_count": 0,
+        },
+    )
+
+    assert result.ready is False
+    assert "1 message asset(s) are pending approval" in result.blockers
 
 
 def test_collect_campaign_readiness_returns_json_safe_result():

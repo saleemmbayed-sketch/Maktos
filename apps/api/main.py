@@ -167,12 +167,32 @@ async def collect_campaign_readiness(campaign_id: UUID, db) -> dict:
         campaign_id,
     )
     asset_metrics = await db.fetchrow(
-        "SELECT COUNT(*)::int AS count FROM campaign_assets WHERE campaign_id = $1",
+        """
+        SELECT
+            COUNT(*)::int AS count,
+            COUNT(*) FILTER (WHERE a.status = 'pending')::int AS pending_approval_count,
+            COUNT(*) FILTER (WHERE a.status = 'rejected')::int AS rejected_approval_count
+        FROM campaign_assets ca
+        LEFT JOIN LATERAL (
+            SELECT status
+            FROM approvals
+            WHERE entity_type = 'message' AND entity_id = ca.id
+            ORDER BY created_at DESC
+            LIMIT 1
+        ) a ON true
+        WHERE ca.campaign_id = $1
+        """,
         campaign_id,
     )
 
     metrics = dict(lead_metrics or {})
     metrics["message_asset_count"] = asset_metrics["count"] if asset_metrics else 0
+    metrics["pending_message_approval_count"] = (
+        asset_metrics["pending_approval_count"] if asset_metrics else 0
+    )
+    metrics["rejected_message_approval_count"] = (
+        asset_metrics["rejected_approval_count"] if asset_metrics else 0
+    )
     result = evaluate_campaign_readiness(
         dict(campaign),
         dict(approval) if approval else None,
