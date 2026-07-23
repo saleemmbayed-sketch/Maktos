@@ -1,0 +1,128 @@
+# CampaignOps Kernel v1 — Full Stack
+# Postgres + FastAPI + n8n + Metabase + Mautic
+#
+# Usage:
+#   docker compose up -d              # Start everything
+#   docker compose --profile test up  # Start + run integration tests
+#   docker compose down               # Stop everything
+
+version: "3.8"
+
+services:
+  # ── Postgres (source of truth) ──────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: campaignops
+      POSTGRES_PASSWORD: campaignops
+      POSTGRES_DB: campaignops
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/001_schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./docker/002_experiments.sql:/docker-entrypoint-initdb.d/02_experiments.sql
+      - ./docker/003_seed.sql:/docker-entrypoint-initdb.d/03_seed.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U campaignops"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── FastAPI (CampaignOps Kernel) ────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://campaignops:campaignops@postgres:5432/campaignops
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-sk-placeholder}
+      SMARTLEAD_API_KEY: ${SMARTLEAD_API_KEY:-placeholder}
+      CAMPAIGN_OWNER_EMAIL: ${CAMPAIGN_OWNER_EMAIL:-ops@campaignops.dev}
+      CAMPAIGN_ID: c0000000-0000-0000-0000-000000000001
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── n8n (workflow orchestrator) ─────────────────────────────
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    environment:
+      N8N_HOST: localhost
+      N8N_PORT: 5678
+      N8N_PROTOCOL: http
+      NODE_ENV: production
+      WEBHOOK_URL: http://n8n:5678
+      FASTAPI_URL: http://api:8000
+      CAMPAIGN_ID: c0000000-0000-0000-0000-000000000001
+      CAMPAIGN_OWNER_EMAIL: ${CAMPAIGN_OWNER_EMAIL:-ops@campaignops.dev}
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: postgres
+      DB_POSTGRESDB_DATABASE: campaignops
+      DB_POSTGRESDB_USER: campaignops
+      DB_POSTGRESDB_PASSWORD: campaignops
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./workflows:/home/node/workflows
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Metabase (dashboard) ────────────────────────────────────
+  metabase:
+    image: metabase/metabase
+    environment:
+      MB_DB_TYPE: postgres
+      MB_DB_DBNAME: campaignops
+      MB_DB_PORT: 5432
+      MB_DB_USER: campaignops
+      MB_DB_PASS: campaignops
+      MB_DB_HOST: postgres
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Mautic (nurture automation — Phase C) ───────────────────
+  mautic:
+    image: mautic/mautic:latest
+    environment:
+      MAUTIC_DB_HOST: postgres
+      MAUTIC_DB_USER: campaignops
+      MAUTIC_DB_PASSWORD: campaignops
+      MAUTIC_DB_NAME: campaignops
+      MAUTIC_DB_PORT: 5432
+    ports:
+      - "8080:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles: ["full", "mautic"]  # Only starts with --profile full or --profile mautic
+
+  # ── Integration test runner ──────────────────────────────────
+  test:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.test
+    environment:
+      DATABASE_URL: postgresql://campaignops:campaignops@postgres:5432/campaignops
+      FASTAPI_URL: http://api:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_started
+    profiles: ["test"]
+
+volumes:
+  pgdata:
+  n8n_data:

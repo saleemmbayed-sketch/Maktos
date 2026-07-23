@@ -1,0 +1,21 @@
+FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY packages/ ./packages/
+COPY tests/ ./tests/
+COPY deploy/simulate_campaign.py ./deploy/
+ENV PYTHONPATH=/app:/app/packages
+
+CMD ["sh", "-c", "\
+  echo 'Waiting for API...' && \
+  sleep 3 && \
+  curl -s http://api:8000/health && \
+  echo '' && \
+  python tests/test_scoring.py && \
+  python tests/test_compliance.py && \
+  python tests/test_reply_classifier.py && \
+  python tests/test_experiments.py && \
+  python tests/test_integration.py && \
+  echo '' && \
+  echo 'ALL 58 TESTS PASSED — Full stack verified'"]

@@ -1,0 +1,77 @@
+{
+  "name": "CampaignOps: Enrichment Pipeline",
+  "version": "1.0",
+  "trigger": "Webhook from lead import (workflow 02) after lead creation",
+  "description": "After lead import → for each lead with a domain → call Firecrawl enrichment → update lead fit score + personalization data",
+  "nodes": [
+    {
+      "id": "trigger",
+      "type": "n8n-nodes-base.webhook",
+      "name": "Enrichment Trigger",
+      "parameters": {"httpMethod": "POST", "path": "enrich/leads"}
+    },
+    {
+      "id": "get_unenriched",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Get Unenriched Leads",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT l.id, a.domain, a.company_name FROM leads l JOIN accounts a ON l.account_id = a.id WHERE a.research_status = 'pending' AND a.domain IS NOT NULL LIMIT 10"
+      }
+    },
+    {
+      "id": "call_enrichment_api",
+      "type": "n8n-nodes-base.httpRequest",
+      "name": "Call Enrichment API",
+      "parameters": {
+        "method": "POST",
+        "url": "http://api:8000/enrich/company",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "domain", "value": "={{ $json.domain }}"},
+            {"name": "company_name", "value": "={{ $json.company_name }}"}
+          ]
+        }
+      }
+    },
+    {
+      "id": "update_account",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Update Account Enrichment",
+      "parameters": {
+        "operation": "update",
+        "tableId": "accounts",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {
+          "values": {
+            "id": "={{ $json.account_id }}",
+            "research_status": "enriched",
+            "enrichment_data": "={{ JSON.stringify($json.enrichment_result) }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "update_lead_score",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Update Lead Score with Enrichment",
+      "parameters": {
+        "operation": "update",
+        "tableId": "leads",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {
+          "values": {
+            "id": "={{ $json.lead_id }}",
+            "scoring_reasons": "={{ $json.scoring_reasons }}"
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "trigger": {"main": [["get_unenriched"]]},
+    "get_unenriched": {"main": [["call_enrichment_api"]]},
+    "call_enrichment_api": {"main": [["update_account", "update_lead_score"]]}
+  }
+}

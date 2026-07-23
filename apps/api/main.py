@@ -40,8 +40,11 @@ from sla.engine import (
     create_sla_event, SLA_WINDOWS, channels_from_campaign_channels,
 )
 
+from shared.database import db_lifespan
+
 app = FastAPI(
     title="CampaignOps Kernel API",
+    lifespan=db_lifespan,
     version="0.1.0",
     description="Governed campaign operations — Postgres owns state, n8n moves events, AI recommends, humans approve.",
 )
@@ -391,22 +394,39 @@ def sla_stats():
 
 # ── LEAD DETAIL ─────────────────────────────────────────────────
 @app.get("/leads/{lead_id}")
-def get_lead_detail(lead_id: UUID):
-    return {
-        "lead_id": str(lead_id),
-        "query": "SELECT * FROM lead_current_state WHERE lead_id = :lead_id",
-        "tip": "Use Supabase SDK or Metabase for rich lead detail queries",
-    }
+async def get_lead_detail(lead_id: UUID):
+    """Get full lead detail from the database."""
+    from shared.database import get_db, LEAD_DETAIL_QUERY
+    db = await get_db()
+    row = await db.fetchrow(LEAD_DETAIL_QUERY, lead_id)
+    if not row:
+        raise HTTPException(404, "Lead not found")
+    return row
 
 
 # ── CAMPAIGN METRICS ────────────────────────────────────────────
 @app.get("/campaigns/{campaign_id}/metrics")
-def get_campaign_metrics(campaign_id: UUID):
+async def get_campaign_metrics(campaign_id: UUID):
+    """Get real-time campaign metrics from the database."""
+    from shared.database import get_db
+    db = await get_db()
+    statuses = await db.fetch(
+        "SELECT status, COUNT(*) as count FROM leads WHERE campaign_id = $1 GROUP BY status",
+        campaign_id,
+    )
+    tiers = await db.fetch(
+        "SELECT tier, COUNT(*) as count FROM leads WHERE campaign_id = $1 GROUP BY tier",
+        campaign_id,
+    )
+    sla = await db.fetch(
+        "SELECT status, COUNT(*) as count FROM sla_events s JOIN leads l ON s.lead_id = l.id WHERE l.campaign_id = $1 AND s.status IN ('active','due_soon','overdue','escalated') GROUP BY s.status",
+        campaign_id,
+    )
     return {
         "campaign_id": str(campaign_id),
-        "query": "SELECT status, tier, COUNT(*) FROM leads WHERE campaign_id = :id GROUP BY status, tier",
-        "sla_query": "SELECT status, COUNT(*) FROM sla_events WHERE status IN ('active','due_soon','overdue')",
-        "tip": "Connect Metabase/Retool to Supabase for full dashboards",
+        "lead_statuses": {s["status"]: s["count"] for s in statuses},
+        "tiers": {t["tier"]: t["count"] for t in tiers},
+        "sla": {s["status"]: s["count"] for s in sla},
     }
 
 
@@ -414,6 +434,65 @@ def get_campaign_metrics(campaign_id: UUID):
 # ═══════════════════════════════════════════════════════════════════
 # PHASE E — EXPERIMENTS & A/B TESTING
 # ═══════════════════════════════════════════════════════════════════
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ENRICHMENT (Phase B — Firecrawl + company research)
+# ═══════════════════════════════════════════════════════════════════
+
+class EnrichRequest(BaseModel):
+    domain: str
+    company_name: str = ""
+    sources: list[str] = ["firecrawl"]
+
+@app.post("/enrich/company")
+async def enrich_company(request: EnrichRequest):
+    """Enrich a company profile using Firecrawl and other sources."""
+    from enrichment.engine import EnrichmentPipeline
+    pipeline = EnrichmentPipeline()
+    profile = pipeline.enrich_company(
+        domain=request.domain,
+        company_name=request.company_name,
+    )
+    brief = pipeline.generate_personalization_brief(profile)
+    return {
+        "domain": request.domain,
+        "profile": {
+            "industry": profile.industry,
+            "likely_uses_crm": profile.likely_uses_crm,
+            "likely_uses_cpq": profile.likely_uses_cpq,
+            "tech_stack": profile.tech_stack,
+        },
+        "personalization_brief": {
+            "observation": brief.one_line_observation,
+            "trigger": brief.relevant_trigger,
+            "icebreaker": brief.icebreaker,
+        },
+        "sources": [s.provider for s in profile.sources],
+    }
+
+class EnrichBatchRequest(BaseModel):
+    companies: list[EnrichRequest]
+
+@app.post("/enrich/company/batch")
+async def enrich_companies_batch(request: EnrichBatchRequest):
+    """Batch enrich multiple companies."""
+    results = []
+    for company in request.companies:
+        from enrichment.engine import EnrichmentPipeline
+        pipeline = EnrichmentPipeline()
+        profile = pipeline.enrich_company(
+            domain=company.domain,
+            company_name=company.company_name,
+        )
+        brief = pipeline.generate_personalization_brief(profile)
+        results.append({
+            "domain": company.domain,
+            "has_cpq_signal": profile.likely_uses_cpq,
+            "personalization": brief.one_line_observation,
+        })
+    return {"enriched": len(results), "results": results}
+
 
 class CreateExperimentRequest(BaseModel):
     campaign_id: UUID

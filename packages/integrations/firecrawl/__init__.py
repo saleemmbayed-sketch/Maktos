@@ -1,1 +1,2 @@
-"""firecrawl integration — stub for Phase A MVP."""
+"""Firecrawl integration — website scraping for lead enrichment."""
+from .client import FirecrawlClient, build_enrichment_payload

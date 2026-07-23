@@ -5,3 +5,4 @@ openai>=1.6.0
 httpx>=0.25.0
 supabase>=2.0.0
 python-dotenv>=1.0.0
+asyncpg>=0.29.0
