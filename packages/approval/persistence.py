@@ -29,6 +29,16 @@ class PersistedMessageApprovalResult:
     executable: bool
 
 
+@dataclass
+class PersistedMessageDecisionResult:
+    approval_id: str
+    asset_id: str
+    status: str
+    reviewer: str
+    comments: str
+    executable: bool
+
+
 async def approve_campaign_for_review(
     db,
     campaign_id: UUID,
@@ -184,5 +194,91 @@ async def persist_message_for_approval(
         approval_id=str(approval["id"]),
         compliance_status=compliance_status,
         approval_status=approval["status"],
+        executable=False,
+    )
+
+
+async def approve_message_asset_for_send_gate(
+    db,
+    asset_id: UUID,
+    reviewer: str,
+    comments: str,
+) -> PersistedMessageDecisionResult:
+    """Approve a persisted message asset for the send gate without sending it."""
+    asset = await db.fetchrow(
+        "SELECT id, campaign_id, approval_status FROM campaign_assets WHERE id = $1",
+        asset_id,
+    )
+    if not asset:
+        raise ValueError(f"No message asset found for asset_id={asset_id}")
+
+    before = await db.fetchrow(
+        """
+        SELECT id, entity_type, entity_id, status, reviewer, comments
+        FROM approvals
+        WHERE entity_type = 'message' AND entity_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        asset_id,
+    )
+    if not before:
+        raise ValueError(f"No message approval found for asset_id={asset_id}")
+
+    if before["status"] == "approved":
+        return PersistedMessageDecisionResult(
+            approval_id=str(before["id"]),
+            asset_id=str(asset_id),
+            status="approved",
+            reviewer=before.get("reviewer") or reviewer,
+            comments=before.get("comments") or comments,
+            executable=False,
+        )
+
+    after = await db.fetchrow(
+        """
+        UPDATE approvals
+        SET status = 'approved', reviewer = $1, comments = $2, approved_at = now()
+        WHERE id = $3
+        RETURNING id, entity_id, status, reviewer, comments
+        """,
+        reviewer,
+        comments,
+        before["id"],
+    )
+    await db.execute(
+        """
+        UPDATE campaign_assets
+        SET approval_status = 'approved'
+        WHERE id = $1
+        """,
+        asset_id,
+    )
+    await db.execute(
+        """
+        INSERT INTO audit_log (actor_type, actor_id, action, entity_type, entity_id, before_json, after_json)
+        VALUES ('human', $1, 'message_asset_approved_for_send_gate', 'message', $2, to_jsonb($3::json), to_jsonb($4::json))
+        """,
+        reviewer,
+        asset_id,
+        json.dumps({
+            "approval_id": str(before["id"]),
+            "status": before["status"],
+            "asset_approval_status": asset["approval_status"],
+        }),
+        json.dumps({
+            "approval_id": str(after["id"]),
+            "status": after["status"],
+            "asset_approval_status": "approved",
+            "executable": False,
+        }),
+    )
+
+    return PersistedMessageDecisionResult(
+        approval_id=str(after["id"]),
+        asset_id=str(asset_id),
+        status=after["status"],
+        reviewer=after["reviewer"],
+        comments=after["comments"],
         executable=False,
     )

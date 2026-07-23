@@ -10,8 +10,13 @@ sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "packages"))
 
 import shared.database as database
-from apps.api.main import PersistMessageApprovalRequest, persist_message_approval
-from tests.test_approval_persistence import FakeMessageDb
+from apps.api.main import (
+    MessageApprovalDecisionRequest,
+    PersistMessageApprovalRequest,
+    approve_message_asset,
+    persist_message_approval,
+)
+from tests.test_approval_persistence import FakeMessageDb, FakeMessageDecisionDb
 
 
 def _approved_request(campaign_id):
@@ -62,4 +67,28 @@ def test_persist_message_approval_persists_compliant_message(monkeypatch):
     assert result["asset_id"] == str(db.asset_id)
     assert result["approval_id"] == str(db.approval_id)
     assert result["approval_status"] == "pending"
+    assert result["executable"] is False
+
+
+def test_approve_message_asset_returns_non_executable_decision(monkeypatch):
+    db = FakeMessageDecisionDb()
+
+    async def fake_get_db():
+        return db
+
+    monkeypatch.setattr(database, "get_db", fake_get_db)
+
+    result = asyncio.run(
+        approve_message_asset(
+            db.asset_id,
+            MessageApprovalDecisionRequest(
+                reviewer="Saleem",
+                comments="Approved for send gate only",
+            ),
+        )
+    )
+
+    assert result["asset_id"] == str(db.asset_id)
+    assert result["approval_id"] == str(db.approval_id)
+    assert result["status"] == "approved"
     assert result["executable"] is False

@@ -9,7 +9,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "packages"))
 
-from approval.persistence import approve_campaign_for_review, persist_message_for_approval
+from approval.persistence import (
+    approve_campaign_for_review,
+    approve_message_asset_for_send_gate,
+    persist_message_for_approval,
+)
 
 
 class FakeDb:
@@ -69,6 +73,46 @@ class FakeMessageDb:
         return "INSERT 0 1"
 
 
+class FakeMessageDecisionDb:
+    def __init__(self):
+        self.asset_id = uuid4()
+        self.campaign_id = uuid4()
+        self.approval_id = uuid4()
+        self.fetchrow_calls = []
+        self.execute_calls = []
+
+    async def fetchrow(self, query, *args):
+        self.fetchrow_calls.append((query, args))
+        if "FROM campaign_assets" in query:
+            return {
+                "id": self.asset_id,
+                "campaign_id": self.campaign_id,
+                "approval_status": "approved",
+            }
+        if "SELECT id, entity_type" in query:
+            return {
+                "id": self.approval_id,
+                "entity_type": "message",
+                "entity_id": self.asset_id,
+                "status": "pending",
+                "reviewer": None,
+                "comments": "pending",
+            }
+        if "UPDATE approvals" in query:
+            return {
+                "id": self.approval_id,
+                "entity_id": self.asset_id,
+                "status": "approved",
+                "reviewer": args[0],
+                "comments": args[1],
+            }
+        return None
+
+    async def execute(self, query, *args):
+        self.execute_calls.append((query, args))
+        return "OK"
+
+
 def test_approve_campaign_for_review_updates_approval_and_audits():
     db = FakeDb()
 
@@ -108,3 +152,25 @@ def test_persist_message_for_approval_creates_asset_compliance_approval_and_audi
     assert len(db.execute_calls) == 2
     assert "INSERT INTO compliance_checks" in db.execute_calls[0][0]
     assert "message_asset_persisted_for_approval" in db.execute_calls[1][0]
+
+
+def test_approve_message_asset_for_send_gate_updates_approval_asset_and_audit():
+    db = FakeMessageDecisionDb()
+
+    result = asyncio.run(
+        approve_message_asset_for_send_gate(
+            db=db,
+            asset_id=db.asset_id,
+            reviewer="Saleem",
+            comments="Approved for send gate only",
+        )
+    )
+
+    assert result.asset_id == str(db.asset_id)
+    assert result.approval_id == str(db.approval_id)
+    assert result.status == "approved"
+    assert result.executable is False
+    assert len(db.fetchrow_calls) == 3
+    assert len(db.execute_calls) == 2
+    assert "UPDATE campaign_assets" in db.execute_calls[0][0]
+    assert "message_asset_approved_for_send_gate" in db.execute_calls[1][0]

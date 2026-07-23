@@ -38,7 +38,7 @@ from approval.queue import (
     requires_approval as check_requires_approval,
 )
 from approval.readiness import evaluate_campaign_readiness
-from approval.persistence import persist_message_for_approval
+from approval.persistence import approve_message_asset_for_send_gate, persist_message_for_approval
 from reply_classifier.classifier import (
     classify_reply, deterministic_classify,
     get_recommended_action, requires_special_handling,
@@ -283,6 +283,11 @@ class PersistMessageApprovalRequest(BaseModel):
     signature_block: Optional[str] = None
     actor_id: str = "n8n_pre_send_gate"
 
+
+class MessageApprovalDecisionRequest(BaseModel):
+    reviewer: str = "operator"
+    comments: str = "Approved for send gate. No send action performed."
+
 @app.post("/compliance/check", response_model=ComplianceResult)
 def check_compliance(request: ComplianceRequest):
     return run_compliance_checks(
@@ -352,6 +357,31 @@ async def persist_message_approval(request: PersistMessageApprovalRequest):
         "approval_status": result.approval_status,
         "executable": result.executable,
         "compliance": compliance.model_dump(mode="json"),
+    }
+
+
+@app.post("/messages/{asset_id}/approve")
+async def approve_message_asset(asset_id: UUID, request: MessageApprovalDecisionRequest):
+    """Approve a persisted message asset for the send gate without sending."""
+    from shared.database import get_db
+
+    db = await get_db()
+    try:
+        result = await approve_message_asset_for_send_gate(
+            db=db,
+            asset_id=asset_id,
+            reviewer=request.reviewer,
+            comments=request.comments,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    return {
+        "asset_id": result.asset_id,
+        "approval_id": result.approval_id,
+        "status": result.status,
+        "reviewer": result.reviewer,
+        "comments": result.comments,
+        "executable": result.executable,
     }
 
 
