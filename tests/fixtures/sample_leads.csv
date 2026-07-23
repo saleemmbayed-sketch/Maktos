@@ -1,0 +1,11 @@
+company_name,domain,industry,company_size,country,first_name,last_name,title,email,linkedin_url,region,data_source,source_date
+Acme Corp,acme.com,SaaS,200-500,US,Sarah,Johnson,VP Sales,sarah@acme.com,https://linkedin.com/in/sarahjohnson,US,manual_research,2026-07-15
+TechFlow,techflow.io,Manufacturing,500-1000,DE,Markus,Weber,Head of Sales,m.weber@techflow.io,https://linkedin.com/in/markusweber,EU,sales_navigator,2026-07-16
+RevOps Pro,revopspro.com,Consulting,50-200,UK,James,Patel,RevOps Director,james@revopspro.com,https://linkedin.com/in/jamespatel,EU,conference_list,2026-07-14
+PipelineFirst,pipelinefirst.com,SaaS,200-500,US,Jennifer,Lee,Inside Sales Manager,jlee@pipelinefirst.com,https://linkedin.com/in/jenniferlee,US,apollo_export,2026-07-17
+QuoteWise,quotewise.com,FinTech,50-200,US,Michael,Chen,Sales Ops Leader,mchen@quotewise.com,https://linkedin.com/in/michaelchen,US,manual_research,2026-07-18
+NordicFlow,nordicflow.no,SaaS,200-500,NO,Ingrid,Hansen,VP Sales,ingrid@nordicflow.no,https://linkedin.com/in/ingridhansen,EU,linkedin_search,2026-07-15
+BuildRight,buildright.de,Construction,500-1000,DE,Thomas,Schmidt,Head of Sales,t.schmidt@buildright.de,https://linkedin.com/in/thomasschmidt,EU,sales_navigator,2026-07-19
+DataPivot,datapivot.com,Data/Analytics,200-500,US,Rachel,Adams,RevOps Director,rachel@datapivot.com,https://linkedin.com/in/racheladams,US,apollo_export,2026-07-17
+ScaleUp,scaleup.fr,SaaS,200-500,FR,Pierre,Dubois,VP Sales,p.dubois@scaleup.fr,https://linkedin.com/in/pierredubois,EU,conference_list,2026-07-14
+CloseRate,closerate.com,Sales Tech,50-200,US,David,Kim,Sales Ops Leader,david@closerate.com,https://linkedin.com/in/davidkim,US,manual_research,2026-07-20

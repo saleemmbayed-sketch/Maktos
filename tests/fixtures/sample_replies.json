@@ -1,0 +1,50 @@
+[
+  {
+    "lead_email": "sarah@acme.com",
+    "reply_text": "Interesting — we definitely have a follow-up problem. Can you send more details about what the audit covers?",
+    "expected_type": "interested",
+    "expected_action": "send_booking_link"
+  },
+  {
+    "lead_email": "m.weber@techflow.io",
+    "reply_text": "Not the right person. Our SDR team handles this — reach out to lisa@techflow.io",
+    "expected_type": "wrong_person",
+    "expected_action": "update_contact"
+  },
+  {
+    "lead_email": "james@revopspro.com",
+    "reply_text": "We already use Outreach for this. Thanks though.",
+    "expected_type": "competitor",
+    "expected_action": "nurture"
+  },
+  {
+    "lead_email": "jlee@pipelinefirst.com",
+    "reply_text": "Please remove me from your list.",
+    "expected_type": "unsubscribe",
+    "expected_action": "suppress_and_stop"
+  },
+  {
+    "lead_email": "mchen@quotewise.com",
+    "reply_text": "What's the pricing? We might be interested if it's in budget.",
+    "expected_type": "pricing_question",
+    "expected_action": "send_pricing_info"
+  },
+  {
+    "lead_email": "ingrid@nordicflow.no",
+    "reply_text": "Can we talk next month? Q3 planning is eating all my time right now.",
+    "expected_type": "not_now",
+    "expected_action": "schedule_followup"
+  },
+  {
+    "lead_email": "rachel@datapivot.com",
+    "reply_text": "This is spam and I am reporting it.",
+    "expected_type": "spam",
+    "expected_action": "suppress_immediately"
+  },
+  {
+    "lead_email": "david@closerate.com",
+    "reply_text": "Yes, let's do the audit. Can you send a Calendly link?",
+    "expected_type": "interested",
+    "expected_action": "send_booking_link"
+  }
+]

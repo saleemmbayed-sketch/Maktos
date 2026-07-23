@@ -1,0 +1,52 @@
+version: "3.8"
+
+services:
+  # --- The kernel API ---
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - ../.env
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # --- Workflow orchestrator ---
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    ports:
+      - "5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ../workflows:/home/node/workflows
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - N8N_USER_FOLDER=/home/node/.n8n
+      # Point n8n to local API
+      - FASTAPI_URL=http://api:8000
+      - CAMPAIGN_ID=c0000000-0000-0000-0000-000000000001
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  # --- Dashboard ---
+  metabase:
+    image: metabase/metabase
+    ports:
+      - "3000:3000"
+    volumes:
+      - metabase_data:/metabase-data
+    restart: unless-stopped
+
+volumes:
+  n8n_data:
+  metabase_data:
