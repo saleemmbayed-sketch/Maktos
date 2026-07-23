@@ -1,0 +1,108 @@
+{
+  "name": "CampaignOps: Daily Summary",
+  "version": "1.0",
+  "trigger": "Cron: every day at 17:00",
+  "description": "Pull campaign metrics → calculate conversion → identify stuck leads → generate AI summary → send to owner",
+  "nodes": [
+    {
+      "id": "trigger",
+      "type": "n8n-nodes-base.cron",
+      "name": "Every Day 17:00",
+      "parameters": {"triggerTimes": {"item": [{"mode": "custom", "hour": 17, "minute": 0}]}}
+    },
+    {
+      "id": "query_metrics",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Query: Campaign Metrics",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT status, tier, COUNT(*) FROM leads WHERE campaign_id = '{{ $env.CAMPAIGN_ID }}' GROUP BY status, tier"
+      }
+    },
+    {
+      "id": "query_events",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Query: Today's Events",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT event_type, COUNT(*) FROM outreach_events WHERE sent_at::date = CURRENT_DATE GROUP BY event_type"
+      }
+    },
+    {
+      "id": "query_replies",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Query: Today's Replies",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT reply_type, COUNT(*) FROM reply_events WHERE created_at::date = CURRENT_DATE GROUP BY reply_type"
+      }
+    },
+    {
+      "id": "query_sla",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Query: Active SLA",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT status, COUNT(*) FROM sla_events WHERE status IN ('due_soon','overdue','escalated') GROUP BY status"
+      }
+    },
+    {
+      "id": "compute_metrics",
+      "type": "n8n-nodes-base.code",
+      "name": "Compute Dashboard Metrics",
+      "parameters": {
+        "jsCode": "const metrics = {\n  leads_active: $input.all()[0].json.filter(r => !['completed','disqualified'].includes(r.status)).reduce((s,r) => s + Number(r.count), 0),\n  emails_sent: $input.all()[1].json.filter(r => r.event_type === 'sent').reduce((s,r) => s + Number(r.count), 0),\n  replies_total: $input.all()[2].json.reduce((s,r) => s + Number(r.count), 0),\n  positive_replies: $input.all()[2].json.filter(r => ['interested','needs_more_info','pricing_question'].includes(r.reply_type)).reduce((s,r) => s + Number(r.count), 0),\n  meetings_booked: $input.all()[0].json.filter(r => r.status === 'booked').reduce((s,r) => s + Number(r.count), 0),\n  sla_risks: $input.all()[3].json.reduce((s,r) => s + Number(r.count), 0),\n  date: new Date().toISOString().split('T')[0]\n};\nreturn [{json: metrics}];"
+      }
+    },
+    {
+      "id": "generate_ai_summary",
+      "type": "@n8n/n8n-nodes-langchain.llm",
+      "name": "AI: Generate Daily Summary",
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "systemPrompt": "You are a campaign analyst. Given metrics, write a concise daily summary: key numbers, best segment, weakest message, SLA risks, one actionable recommendation. Direct and data-driven.",
+        "text": "={{ JSON.stringify($json) }}"
+      }
+    },
+    {
+      "id": "save_summary",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Save Daily Summary",
+      "parameters": {
+        "operation": "create",
+        "tableId": "audit_log",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {
+          "values": {
+            "actor_type": "n8n_workflow",
+            "actor_id": "08_daily_summary",
+            "action": "daily_summary_generated",
+            "entity_type": "campaign",
+            "entity_id": "={{ $env.CAMPAIGN_ID }}",
+            "after_json": "={{ JSON.stringify({summary: $json.ai_output, metrics: $json.metrics}) }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "send_to_owner",
+      "type": "n8n-nodes-base.emailSend",
+      "name": "Send to Campaign Owner",
+      "parameters": {
+        "to": "{{ $env.CAMPAIGN_OWNER_EMAIL }}",
+        "subject": "={{ 'CampaignOps Daily Summary — ' + $json.metrics.date }}",
+        "text": "={{ $json.ai_output }}"
+      }
+    }
+  ],
+  "connections": {
+    "trigger": {"main": [["query_metrics", "query_events", "query_replies", "query_sla"]]},
+    "query_metrics": {"main": [["compute_metrics"]]},
+    "query_events": {"main": [["compute_metrics"]]},
+    "query_replies": {"main": [["compute_metrics"]]},
+    "query_sla": {"main": [["compute_metrics"]]},
+    "compute_metrics": {"main": [["generate_ai_summary"]]},
+    "generate_ai_summary": {"main": [["save_summary"]]},
+    "save_summary": {"main": [["send_to_owner"]]}
+  }
+}

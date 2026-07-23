@@ -1,0 +1,118 @@
+{
+  "name": "CampaignOps: Email Execution",
+  "version": "1.0",
+  "trigger": "Cron: every 2 min, check for approved leads → send via Smartlead/Instantly/HubSpot",
+  "description": "Final suppression check → push contact to email platform → start sequence → save outreach event → stop on reply/unsubscribe/bounce",
+  "nodes": [
+    {
+      "id": "trigger",
+      "type": "n8n-nodes-base.cron",
+      "name": "Every 2 Minutes",
+      "parameters": {"triggerTimes": {"item": [{"mode": "everyMinute", "value": 2}]}}
+    },
+    {
+      "id": "get_approved",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Get Approved Leads",
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "leads",
+        "filters": {"status": "approved"}
+      }
+    },
+    {
+      "id": "final_suppression",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Final Suppression Check",
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "suppression_list",
+        "filters": {"email": "={{ $json.contact_email }}"}
+      }
+    },
+    {
+      "id": "is_suppressed",
+      "type": "n8n-nodes-base.if",
+      "name": "Suppressed?",
+      "parameters": {"conditions": {"boolean": [{"value1": "={{ $json.length }}", "operation": "equals", "value2": 0}]}}
+    },
+    {
+      "id": "push_to_smartlead",
+      "type": "n8n-nodes-base.httpRequest",
+      "name": "Smartlead: Add Contact + Start Sequence",
+      "parameters": {
+        "method": "POST",
+        "url": "https://server.smartlead.ai/api/v1/campaigns/{{ $env.SL_CAMPAIGN_ID }}/leads",
+        "authentication": "genericCredentialType",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "email", "value": "={{ $json.email }}"},
+            {"name": "first_name", "value": "={{ $json.first_name }}"},
+            {"name": "last_name", "value": "={{ $json.last_name }}"},
+            {"name": "company_name", "value": "={{ $json.company_name }}"},
+            {"name": "custom_fields", "value": "={{ JSON.stringify({lead_id: $json.lead_id, message_body: $json.draft_body}) }}"}
+          ]
+        }
+      }
+    },
+    {
+      "id": "log_sent",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Log Outreach Event",
+      "parameters": {
+        "operation": "create",
+        "tableId": "outreach_events",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {
+          "values": {
+            "lead_id": "={{ $json.lead_id }}",
+            "channel": "cold_email",
+            "event_type": "sent",
+            "sent_at": "={{ $now }}",
+            "external_id": "={{ $json.smartlead_response.lead_id }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "update_in_sequence",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Mark Lead in_sequence",
+      "parameters": {
+        "operation": "update",
+        "tableId": "leads",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {"values": {"id": "={{ $json.lead_id }}", "status": "in_sequence"}}
+      }
+    },
+    {
+      "id": "create_sla",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Start SLA Timer",
+      "parameters": {
+        "operation": "create",
+        "tableId": "sla_events",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {
+          "values": {
+            "lead_id": "={{ $json.lead_id }}",
+            "channel": "cold_email",
+            "triggered_at": "={{ $now }}",
+            "due_at": "={{ $now.plus(4, 'hours') }}",
+            "status": "active"
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "trigger": {"main": [["get_approved"]]},
+    "get_approved": {"main": [["final_suppression"]]},
+    "final_suppression": {"main": [["is_suppressed"]]},
+    "is_suppressed": {"main": [["push_to_smartlead"], []]},
+    "push_to_smartlead": {"main": [["log_sent"]]},
+    "log_sent": {"main": [["update_in_sequence"]]},
+    "update_in_sequence": {"main": [["create_sla"]]}
+  }
+}

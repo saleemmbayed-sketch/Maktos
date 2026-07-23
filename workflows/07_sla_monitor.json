@@ -1,0 +1,112 @@
+{
+  "name": "CampaignOps: SLA Monitor",
+  "version": "1.0",
+  "trigger": "Cron: every 15 minutes",
+  "description": "Find unresolved SLA events → compare now vs due_at → alert if due soon / overdue → escalate if needed",
+  "nodes": [
+    {
+      "id": "trigger",
+      "type": "n8n-nodes-base.cron",
+      "name": "Every 15 Minutes",
+      "parameters": {"triggerTimes": {"item": [{"mode": "everyMinute", "value": 15}]}}
+    },
+    {
+      "id": "get_active_sla",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Get Active SLA Events",
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "sla_events",
+        "filters": {"status": {"in": ["active", "due_soon", "overdue"]}}
+      }
+    },
+    {
+      "id": "check_deadlines",
+      "type": "n8n-nodes-base.code",
+      "name": "Check Deadlines",
+      "parameters": {
+        "jsCode": "const now = new Date();\nconst items = $input.all().map(item => {\n  const dueAt = new Date(item.json.due_at);\n  const triggeredAt = new Date(item.json.triggered_at);\n  const totalWindow = dueAt - triggeredAt;\n  const elapsed = now - triggeredAt;\n  const remaining = dueAt - now;\n  const pctElapsed = totalWindow > 0 ? elapsed / totalWindow : 0;\n  \n  let status = item.json.status;\n  if (remaining <= 0) status = 'overdue';\n  else if (pctElapsed >= 0.75) status = 'due_soon';\n  \n  return {\n    json: {\n      ...item.json,\n      status,\n      minutes_remaining: Math.max(0, Math.round(remaining / 60000)),\n      minutes_overdue: remaining < 0 ? Math.round(-remaining / 60000) : 0,\n      pct_elapsed: Math.round(pctElapsed * 100)\n    }\n  };\n});\nreturn items;"
+      }
+    },
+    {
+      "id": "filter_alerts",
+      "type": "n8n-nodes-base.if",
+      "name": "Any Alerts?",
+      "parameters": {
+        "conditions": {
+          "options": {"combinator": "or"},
+          "conditions": [
+            {"value1": "={{ $json.status }}", "operation": "equals", "value2": "overdue"},
+            {"value1": "={{ $json.status }}", "operation": "equals", "value2": "due_soon"}
+          ]
+        }
+      }
+    },
+    {
+      "id": "update_sla_status",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Update SLA Status",
+      "parameters": {
+        "operation": "update",
+        "tableId": "sla_events",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {
+          "values": {
+            "id": "={{ $json.id }}",
+            "status": "={{ $json.status }}",
+            "escalation_level": "={{ Number($json.escalation_level) + (Number($json.status) === 'overdue' ? 1 : 0) }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "build_summary",
+      "type": "n8n-nodes-base.code",
+      "name": "Build Alert Summary",
+      "parameters": {
+        "jsCode": "const alerts = $input.all();\nconst overdue = alerts.filter(a => a.json.status === 'overdue');\nconst dueSoon = alerts.filter(a => a.json.status === 'due_soon');\n\nconst summary = {\n  total_alerts: alerts.length,\n  overdue: overdue.length,\n  due_soon: dueSoon.length,\n  worst_overdue_minutes: Math.max(...overdue.map(a => a.json.minutes_overdue), 0),\n  details: alerts.map(a => ({\n    lead_id: a.json.lead_id,\n    channel: a.json.channel,\n    status: a.json.status,\n    remaining_min: a.json.minutes_remaining,\n    overdue_min: a.json.minutes_overdue,\n    escalation: a.json.escalation_level\n  }))\n};\nreturn [{json: summary}];"
+      }
+    },
+    {
+      "id": "notify_slack",
+      "type": "n8n-nodes-base.slack",
+      "name": "Notify Slack",
+      "parameters": {
+        "channel": "#campaign-ops-alerts",
+        "text": "={{ 'SLA Alert: ' + $json.overdue + ' overdue, ' + $json.due_soon + ' due soon. Worst: ' + $json.worst_overdue_minutes + ' min overdue.' }}"
+      }
+    },
+    {
+      "id": "escalate_critical",
+      "type": "n8n-nodes-base.if",
+      "name": "Critical Escalation?",
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {"value1": "={{ $json.status }}", "operation": "equals", "value2": "overdue"},
+            {"value1": "={{ $json.escalation_level }}", "operation": "gte", "value2": 3}
+          ]
+        }
+      }
+    },
+    {
+      "id": "send_urgent_email",
+      "type": "n8n-nodes-base.emailSend",
+      "name": "Urgent Email to Owner",
+      "parameters": {
+        "to": "{{ $env.CAMPAIGN_OWNER_EMAIL }}",
+        "subject": "URGENT: SLA Escalation Level 3",
+        "text": "Lead {{ $json.lead_id }} has been overdue for {{ $json.minutes_overdue }} minutes. Escalation level: {{ $json.escalation_level }}. Immediate action required."
+      }
+    }
+  ],
+  "connections": {
+    "trigger": {"main": [["get_active_sla"]]},
+    "get_active_sla": {"main": [["check_deadlines"]]},
+    "check_deadlines": {"main": [["filter_alerts"]]},
+    "filter_alerts": {"main": [["update_sla_status"], []]},
+    "update_sla_status": {"main": [["build_summary", "escalate_critical"]]},
+    "escalate_critical": {"main": [["send_urgent_email"], []]},
+    "build_summary": {"main": [["notify_slack"]]}
+  }
+}

@@ -1,0 +1,262 @@
+{
+  "name": "CampaignOps: Lead Import",
+  "version": "1.0",
+  "trigger": "Webhook: lead.import.csv OR manual trigger",
+  "description": "CSV upload \u2192 normalize \u2192 deduplicate \u2192 check suppression \u2192 assign region \u2192 create leads \u2192 run scoring",
+  "nodes": [
+    {
+      "id": "trigger",
+      "type": "n8n-nodes-base.webhook",
+      "name": "CSV Upload Webhook",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead/import-csv"
+      }
+    },
+    {
+      "id": "parse_csv",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "name": "Parse CSV",
+      "parameters": {
+        "operation": "read",
+        "fileFormat": "csv"
+      }
+    },
+    {
+      "id": "normalize",
+      "type": "n8n-nodes-base.code",
+      "name": "Normalize & Deduplicate",
+      "parameters": {
+        "jsCode": "// Validate required columns\nconst required = ['email', 'company_name'];\nconst missing = required.filter(col => !$input.all()[0]?.json?.[col]);\n\nif (missing.length > 0) {\n  throw new Error('Missing required columns: ' + missing.join(', '));\n}\n\n// Normalize: trim, lowercase email, standardize\nconst seen = new Set();\nconst items = $input.all().filter(item => {\n  const email = (item.json.email || '').toLowerCase().trim();\n  if (!email || seen.has(email)) return false;\n  seen.add(email);\n  item.json.email = email;\n  item.json.company_name = (item.json.company_name || '').trim();\n  // Map country to region\n  item.json.region = item.json.region || (['DE','FR','UK','NO','SE','DK','FI','NL','BE','AT','IE','ES','IT','PT'].includes(item.json.country) ? 'EU' : item.json.country || 'US');\n  item.json.data_source = item.json.data_source || 'csv_import';\n  item.json.source_date = item.json.source_date || new Date().toISOString().split('T')[0];\n  return true;\n});\nreturn items;"
+      }
+    },
+    {
+      "id": "check_suppression",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Check Suppression List",
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "suppression_list",
+        "filters": {
+          "email": "={{ $json.email }}"
+        }
+      }
+    },
+    {
+      "id": "filter_suppressed",
+      "type": "n8n-nodes-base.if",
+      "name": "Suppressed?",
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.length }}",
+              "operation": "equals",
+              "value2": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "create_account",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Upsert Account",
+      "parameters": {
+        "operation": "upsert",
+        "tableId": "accounts",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {
+          "values": {
+            "company_name": "={{ $json.company_name }}",
+            "domain": "={{ $json.domain }}",
+            "industry": "={{ $json.industry }}",
+            "country": "={{ $json.country }}",
+            "company_size": "={{ $json.company_size }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "create_contact",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Upsert Contact",
+      "parameters": {
+        "operation": "upsert",
+        "tableId": "contacts",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {
+          "values": {
+            "account_id": "={{ $json.account_id }}",
+            "first_name": "={{ $json.first_name }}",
+            "last_name": "={{ $json.last_name }}",
+            "title": "={{ $json.title }}",
+            "email": "={{ $json.email }}",
+            "linkedin_url": "={{ $json.linkedin_url }}",
+            "region": "={{ $json.region }}",
+            "data_source": "={{ $json.data_source }}",
+            "source_date": "={{ $json.source_date }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "create_lead",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Create Lead",
+      "parameters": {
+        "operation": "create",
+        "tableId": "leads",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {
+          "values": {
+            "campaign_id": "={{ $json.campaign_id }}",
+            "account_id": "={{ $json.account_id }}",
+            "contact_id": "={{ $json.contact_id }}",
+            "status": "imported"
+          }
+        }
+      }
+    },
+    {
+      "id": "call_scoring_api",
+      "type": "n8n-nodes-base.httpRequest",
+      "name": "Call Scoring API",
+      "parameters": {
+        "method": "POST",
+        "url": "http://campaignops-api:8000/leads/score",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "lead_id",
+              "value": "={{ $json.lead_id }}"
+            },
+            {
+              "name": "title",
+              "value": "={{ $json.title }}"
+            },
+            {
+              "name": "industry",
+              "value": "={{ $json.industry }}"
+            },
+            {
+              "name": "company_size",
+              "value": "={{ $json.company_size }}"
+            },
+            {
+              "name": "company_name",
+              "value": "={{ $json.company_name }}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "update_lead_score",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Update Lead Score",
+      "parameters": {
+        "operation": "update",
+        "tableId": "leads",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {
+          "values": {
+            "id": "={{ $json.lead_id }}",
+            "lead_score": "={{ $json.score }}",
+            "tier": "={{ $json.tier }}",
+            "scoring_reasons": "={{ $json.reasons }}",
+            "status": "scored"
+          }
+        }
+      }
+    },
+    {
+      "id": "log_suppressed",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Log Suppressed Contact",
+      "parameters": {
+        "operation": "create",
+        "tableId": "audit_log",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {
+          "values": {
+            "actor_type": "n8n_workflow",
+            "actor_id": "02_lead_import",
+            "action": "lead_blocked_suppression",
+            "entity_type": "contact",
+            "entity_id": "={{ $json.email }}"
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "trigger": {
+      "main": [
+        [
+          "parse_csv"
+        ]
+      ]
+    },
+    "parse_csv": {
+      "main": [
+        [
+          "normalize"
+        ]
+      ]
+    },
+    "normalize": {
+      "main": [
+        [
+          "check_suppression"
+        ]
+      ]
+    },
+    "check_suppression": {
+      "main": [
+        [
+          "filter_suppressed"
+        ]
+      ]
+    },
+    "filter_suppressed": {
+      "main": [
+        [
+          "create_account"
+        ],
+        [
+          "log_suppressed"
+        ]
+      ]
+    },
+    "create_account": {
+      "main": [
+        [
+          "create_contact"
+        ]
+      ]
+    },
+    "create_contact": {
+      "main": [
+        [
+          "create_lead"
+        ]
+      ]
+    },
+    "create_lead": {
+      "main": [
+        [
+          "call_scoring_api"
+        ]
+      ]
+    },
+    "call_scoring_api": {
+      "main": [
+        [
+          "update_lead_score"
+        ]
+      ]
+    }
+  }
+}

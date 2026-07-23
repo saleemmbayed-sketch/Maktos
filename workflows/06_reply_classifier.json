@@ -1,0 +1,320 @@
+{
+  "name": "CampaignOps: Reply Classifier",
+  "version": "1.0",
+  "trigger": "Webhook from Smartlead/Instantly reply webhook",
+  "description": "Stop sequence \u2192 classify reply \u2192 create reply_event \u2192 set lead status \u2192 draft response \u2192 start SLA timer",
+  "nodes": [
+    {
+      "id": "trigger",
+      "type": "n8n-nodes-base.webhook",
+      "name": "Reply Webhook",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "email/reply"
+      }
+    },
+    {
+      "id": "stop_sequence",
+      "type": "n8n-nodes-base.httpRequest",
+      "name": "Stop Email Sequence",
+      "parameters": {
+        "method": "POST",
+        "url": "https://server.smartlead.ai/api/v1/campaigns/{{ $env.SL_CAMPAIGN_ID }}/leads/{{ $json.external_id }}/stop",
+        "authentication": "genericCredentialType"
+      }
+    },
+    {
+      "id": "classify",
+      "type": "n8n-nodes-base.httpRequest",
+      "name": "AI: Classify Reply",
+      "parameters": {
+        "method": "POST",
+        "url": "http://campaignops-api:8000/replies/classify",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "reply_text",
+              "value": "={{ $json.reply_text }}"
+            },
+            {
+              "name": "lead_id",
+              "value": "={{ $json.lead_id }}"
+            },
+            {
+              "name": "channel",
+              "value": "cold_email"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "save_reply",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Save Reply Event",
+      "parameters": {
+        "operation": "create",
+        "tableId": "reply_events",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {
+          "values": {
+            "lead_id": "={{ $json.lead_id }}",
+            "channel": "cold_email",
+            "reply_text": "={{ $json.reply_text }}",
+            "reply_type": "={{ $json.classification.reply_type }}",
+            "confidence": "={{ $json.classification.confidence }}",
+            "recommended_action": "={{ $json.classification.recommended_action }}",
+            "draft_response": "={{ $json.classification.draft_response }}",
+            "status": "={{ $json.classification.needs_human_review ? 'reviewed' : 'auto_classified' }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "route_action",
+      "type": "n8n-nodes-base.switch",
+      "name": "Route by Reply Type",
+      "parameters": {
+        "dataPropertyName": "classification.reply_type",
+        "rules": [
+          {
+            "value": "interested",
+            "output": 0
+          },
+          {
+            "value": "unsubscribe",
+            "output": 1
+          },
+          {
+            "value": "spam",
+            "output": 1
+          },
+          {
+            "value": "legal_privacy",
+            "output": 1
+          },
+          {
+            "value": "negative",
+            "output": 2
+          },
+          {
+            "value": "not_now",
+            "output": 3
+          },
+          {
+            "value": "wrong_person",
+            "output": 4
+          },
+          {
+            "value": "other",
+            "output": 5
+          }
+        ]
+      }
+    },
+    {
+      "id": "handle_interested",
+      "type": "n8n-nodes-base.code",
+      "name": "Interested: Update Lead \u2192 Booked + Notify",
+      "parameters": {
+        "jsCode": "// Update lead status to replied, set next_action to send_booking_link\n// Notify campaign owner\nreturn [{json: {...$json, lead_status: 'replied', next_action: 'send_booking_link'}}];"
+      }
+    },
+    {
+      "id": "handle_unsubscribe",
+      "type": "n8n-nodes-base.code",
+      "name": "Unsubscribe/Spam/Legal: Suppress Immediately",
+      "parameters": {
+        "jsCode": "// Add to suppression_list, mark lead as disqualified\n// Log for audit\nreturn [{json: {...$json, lead_status: 'disqualified', suppress: true}}];"
+      }
+    },
+    {
+      "id": "handle_negative",
+      "type": "n8n-nodes-base.code",
+      "name": "Negative: Mark Do Not Contact",
+      "parameters": {
+        "jsCode": "// Add to suppression_list, mark disqualified\nreturn [{json: {...$json, lead_status: 'disqualified', suppress: true}}];"
+      }
+    },
+    {
+      "id": "handle_not_now",
+      "type": "n8n-nodes-base.code",
+      "name": "Not Now: Schedule Follow-up",
+      "parameters": {
+        "jsCode": "// Mark lead as nurturing, set next_action_due_at to +30 days\nreturn [{json: {...$json, lead_status: 'nurturing', next_action: 'follow_up_in_30_days'}}];"
+      }
+    },
+    {
+      "id": "handle_wrong_person",
+      "type": "n8n-nodes-base.code",
+      "name": "Wrong Person: Update Contact",
+      "parameters": {
+        "jsCode": "// If referral present, create new contact for referred person\nreturn [{json: {...$json, lead_status: 'disqualified', reason: 'wrong_person'}}];"
+      }
+    },
+    {
+      "id": "update_lead",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Update Lead Status",
+      "parameters": {
+        "operation": "update",
+        "tableId": "leads",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {
+          "values": {
+            "id": "={{ $json.lead_id }}",
+            "status": "={{ $json.lead_status }}",
+            "next_action": "={{ $json.next_action }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "suppress_email",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Add to Suppression List",
+      "parameters": {
+        "operation": "create",
+        "tableId": "suppression_list",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {
+          "values": {
+            "email": "={{ $json.email }}",
+            "reason": "={{ $json.classification.reply_type }}",
+            "source": "reply_classifier"
+          }
+        }
+      }
+    },
+    {
+      "id": "resolve_sla",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Resolve SLA",
+      "parameters": {
+        "operation": "update",
+        "tableId": "sla_events",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {
+          "values": {
+            "lead_id": "={{ $json.lead_id }}",
+            "status": "resolved",
+            "resolved_at": "={{ $now }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "notify_owner",
+      "type": "n8n-nodes-base.emailSend",
+      "name": "Notify Owner (Interested Lead)",
+      "parameters": {
+        "to": "{{ $env.CAMPAIGN_OWNER_EMAIL }}",
+        "subject": "CampaignOps: Interested Reply!",
+        "text": "Lead {{ $json.email }} replied INTERESTED. Action: send booking link. Reply: {{ $json.reply_text }}"
+      }
+    },
+    {
+      "id": "bounce_handler",
+      "type": "n8n-nodes-base.code",
+      "name": "Handle Bounce/Complaint",
+      "parameters": {
+        "jsCode": "// Handle bounce and complaint events from Smartlead\nconst eventType = $json.event_type;\nconst leadId = $json.lead_id || $json.external_id;\nconst email = $json.email;\n\nif (eventType === 'LEAD_BOUNCED') {\n  return [{\n    json: {\n      lead_id: leadId,\n      email: email,\n      lead_status: 'disqualified',\n      reason: 'bounced',\n      suppress: true,\n      note: 'Email bounced \u2014 add to suppression list'\n    }\n  }];\n}\n\nif (eventType === 'LEAD_COMPLAINED' || eventType === 'LEAD_UNSUBSCRIBED') {\n  return [{\n    json: {\n      lead_id: leadId,\n      email: email,\n      lead_status: 'disqualified',\n      reason: eventType === 'LEAD_COMPLAINED' ? 'complaint' : 'unsubscribed',\n      suppress: true,\n      note: 'Immediate suppression required'\n    }\n  }];\n}\n\nreturn [];"
+      }
+    }
+  ],
+  "connections": {
+    "trigger": {
+      "main": [
+        [
+          "stop_sequence",
+          "classify",
+          {
+            "node": "bounce_handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "classify": {
+      "main": [
+        [
+          "save_reply"
+        ]
+      ]
+    },
+    "save_reply": {
+      "main": [
+        [
+          "route_action"
+        ]
+      ]
+    },
+    "route_action": {
+      "main": [
+        [
+          "handle_interested"
+        ],
+        [
+          "handle_unsubscribe"
+        ],
+        [
+          "handle_negative"
+        ],
+        [
+          "handle_not_now"
+        ],
+        [
+          "handle_wrong_person"
+        ],
+        [
+          "handle_wrong_person"
+        ]
+      ]
+    },
+    "handle_interested": {
+      "main": [
+        [
+          "update_lead",
+          "resolve_sla",
+          "notify_owner"
+        ]
+      ]
+    },
+    "handle_unsubscribe": {
+      "main": [
+        [
+          "update_lead",
+          "suppress_email",
+          "resolve_sla"
+        ]
+      ]
+    },
+    "handle_negative": {
+      "main": [
+        [
+          "update_lead",
+          "suppress_email",
+          "resolve_sla"
+        ]
+      ]
+    },
+    "handle_not_now": {
+      "main": [
+        [
+          "update_lead",
+          "resolve_sla"
+        ]
+      ]
+    },
+    "handle_wrong_person": {
+      "main": [
+        [
+          "update_lead",
+          "resolve_sla"
+        ]
+      ]
+    }
+  }
+}

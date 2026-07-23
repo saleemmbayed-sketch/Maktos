@@ -1,0 +1,122 @@
+{
+  "name": "CampaignOps: Asset Intake",
+  "version": "1.0",
+  "trigger": "Webhook: campaign.asset.uploaded",
+  "description": "Trigger: new campaign asset uploaded → extract text → AI parse CampaignSpec → store in Supabase → flag risky claims",
+  "nodes": [
+    {
+      "id": "trigger",
+      "type": "n8n-nodes-base.webhook",
+      "name": "Asset Upload Webhook",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "campaign/asset-upload"
+      }
+    },
+    {
+      "id": "extract_text",
+      "type": "n8n-nodes-base.extractFromFile",
+      "name": "Extract Text from Asset",
+      "parameters": {
+        "binaryPropertyName": "data",
+        "options": {}
+      }
+    },
+    {
+      "id": "store_asset",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Store in Supabase",
+      "parameters": {
+        "operation": "create",
+        "tableId": "campaign_assets",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {
+          "values": {
+            "campaign_id": "={{ $json.campaign_id }}",
+            "asset_type": "={{ $json.asset_type }}",
+            "content": "={{ $json.extracted_text }}",
+            "source_file": "={{ $json.filename }}",
+            "approval_status": "needs_review",
+            "risk_level": "low"
+          }
+        }
+      }
+    },
+    {
+      "id": "ai_parse",
+      "type": "@n8n/n8n-nodes-langchain.llm",
+      "name": "AI: CampaignSpec Extraction",
+      "parameters": {
+        "model": "gpt-4o",
+        "systemPrompt": "You extract structured campaign plans from marketing assets. Output JSON with: campaign_name, offer, goal, north_star_metric, personas[], channels[], cta{}, claims[], compliance_rules{}",
+        "promptType": "define",
+        "text": "={{ $json.extracted_text }}"
+      }
+    },
+    {
+      "id": "save_spec",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Save CampaignSpec",
+      "parameters": {
+        "operation": "create",
+        "tableId": "campaign_specs",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {
+          "values": {
+            "campaign_id": "={{ $json.campaign_id }}",
+            "personas_json": "={{ $json.ai_output.personas }}",
+            "channels_json": "={{ $json.ai_output.channels }}",
+            "kpis_json": "={{ $json.ai_output.kpis }}",
+            "cta_json": "={{ $json.ai_output.cta }}",
+            "claims_json": "={{ $json.ai_output.claims }}",
+            "compliance_rules_json": "={{ $json.ai_output.compliance_rules }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "flag_risky",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Flag Risky Claims",
+      "parameters": {
+        "operation": "create",
+        "tableId": "risky_claims",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {
+          "values": {
+            "campaign_id": "={{ $json.campaign_id }}",
+            "claim_text": "={{ $json.claim }}",
+            "risk_reason": "={{ $json.risk_reason }}",
+            "flagged_by": "ai"
+          }
+        }
+      }
+    },
+    {
+      "id": "audit",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Audit Log",
+      "parameters": {
+        "operation": "create",
+        "tableId": "audit_log",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {
+          "values": {
+            "actor_type": "n8n_workflow",
+            "actor_id": "01_asset_intake",
+            "action": "asset_intake_complete",
+            "entity_type": "campaign",
+            "entity_id": "={{ $json.campaign_id }}",
+            "after_json": "={{ $json.ai_output }}"
+          }
+        }
+      }
+    }
+  ],
+  "connections": {
+    "trigger": {"main": [["extract_text"]]},
+    "extract_text": {"main": [["store_asset", "ai_parse"]]},
+    "ai_parse": {"main": [["save_spec"]]},
+    "save_spec": {"main": [["flag_risky", "audit"]]}
+  }
+}

@@ -1,0 +1,106 @@
+{
+  "name": "CampaignOps: Compliance Check",
+  "version": "1.0",
+  "trigger": "Webhook or API call from workflow 03",
+  "description": "Check unsubscribe/footer/privacy → check suppression → check data source → check risky claims → approve, block, or request review",
+  "nodes": [
+    {
+      "id": "trigger",
+      "type": "n8n-nodes-base.webhook",
+      "name": "Compliance Webhook",
+      "parameters": {"httpMethod": "POST", "path": "compliance/check"}
+    },
+    {
+      "id": "run_checks",
+      "type": "n8n-nodes-base.httpRequest",
+      "name": "Run Compliance Engine",
+      "parameters": {
+        "method": "POST",
+        "url": "http://campaignops-api:8000/compliance/check",
+        "sendBody": true,
+        "bodyParameters": {"parameters": [
+          {"name": "lead_id", "value": "={{ $json.lead_id }}"},
+          {"name": "channel", "value": "={{ $json.channel }}"},
+          {"name": "message_body", "value": "={{ $json.message_body }}"},
+          {"name": "contact_email", "value": "={{ $json.contact_email }}"},
+          {"name": "contact_region", "value": "={{ $json.contact_region }}"},
+          {"name": "contact_data_source", "value": "={{ $json.contact_data_source }}"}
+        ]}
+      }
+    },
+    {
+      "id": "route_result",
+      "type": "n8n-nodes-base.switch",
+      "name": "Route by Status",
+      "parameters": {
+        "dataPropertyName": "status",
+        "rules": [
+          {"value": "approved", "output": 0},
+          {"value": "blocked", "output": 1},
+          {"value": "needs_review", "output": 2}
+        ]
+      }
+    },
+    {
+      "id": "log_blocked",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Log Blocked",
+      "parameters": {
+        "operation": "create",
+        "tableId": "compliance_checks",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {
+          "values": {
+            "lead_id": "={{ $json.lead_id }}",
+            "channel": "={{ $json.channel }}",
+            "status": "blocked",
+            "blocked_reasons": "={{ $json.blocked_reasons }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "mark_for_approval",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Mark for Approval",
+      "parameters": {
+        "operation": "create",
+        "tableId": "approvals",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {
+          "values": {
+            "entity_type": "message",
+            "entity_id": "={{ $json.asset_id }}",
+            "status": "pending"
+          }
+        }
+      }
+    },
+    {
+      "id": "update_lead_approved",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Mark Lead Approved",
+      "parameters": {
+        "operation": "update",
+        "tableId": "leads",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {"values": {"id": "={{ $json.lead_id }}", "status": "approved"}}
+      }
+    },
+    {
+      "id": "notify_review",
+      "type": "n8n-nodes-base.emailSend",
+      "name": "Notify Reviewer (Slack/Email)",
+      "parameters": {
+        "to": "{{ $env.CAMPAIGN_OWNER_EMAIL }}",
+        "subject": "CampaignOps: Message Needs Review",
+        "text": "A message for lead {{ $json.lead_id }} has been flagged for review. Blocked reasons: {{ $json.blocked_reasons }}"
+      }
+    }
+  ],
+  "connections": {
+    "trigger": {"main": [["run_checks"]]},
+    "run_checks": {"main": [["route_result"]]},
+    "route_result": {"main": [["update_lead_approved"], ["log_blocked", "notify_review"], ["mark_for_approval", "notify_review"]]}
+  }
+}

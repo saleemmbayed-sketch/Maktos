@@ -1,0 +1,110 @@
+{
+  "name": "CampaignOps: Draft Generation",
+  "version": "1.0",
+  "trigger": "Cron: every 5 min, check for scored leads without drafts",
+  "description": "For each scored lead: select template by persona/channel → add personalization → generate draft → save → trigger compliance check",
+  "nodes": [
+    {
+      "id": "trigger",
+      "type": "n8n-nodes-base.cron",
+      "name": "Every 5 Minutes",
+      "parameters": {"triggerTimes": {"item": [{"mode": "everyMinute", "value": 5}]}}
+    },
+    {
+      "id": "get_unprocessed",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Get Scored Leads Without Drafts",
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "leads",
+        "filters": {"status": "scored", "tier": {"in": ["tier_1", "tier_2"]}}
+      }
+    },
+    {
+      "id": "select_template",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Select Template",
+      "parameters": {
+        "operation": "getAll",
+        "tableId": "message_templates",
+        "filters": {
+          "campaign_id": "={{ $json.campaign_id }}",
+          "persona": "={{ $json.persona }}",
+          "is_active": true
+        }
+      }
+    },
+    {
+      "id": "ai_generate",
+      "type": "@n8n/n8n-nodes-langchain.llm",
+      "name": "AI: Generate Draft",
+      "parameters": {
+        "model": "gpt-4o",
+        "systemPrompt": "You generate personalized B2B cold emails. Use provided template. Fill {{placeholders}} with actual data. Output JSON: {subject, body, personalization_fields: {}}",
+        "text": "={{ JSON.stringify({template: $json.template, lead: $json.lead_data}) }}"
+      }
+    },
+    {
+      "id": "save_draft",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Save Draft as Asset",
+      "parameters": {
+        "operation": "create",
+        "tableId": "campaign_assets",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {
+          "values": {
+            "campaign_id": "={{ $json.campaign_id }}",
+            "asset_type": "cold_email",
+            "channel": "cold_email",
+            "persona": "={{ $json.persona }}",
+            "funnel_stage": "awareness",
+            "content": "={{ $json.ai_output.body }}",
+            "approval_status": "needs_review",
+            "risk_level": "low"
+          }
+        }
+      }
+    },
+    {
+      "id": "update_lead_status",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Mark Lead draft_ready",
+      "parameters": {
+        "operation": "update",
+        "tableId": "leads",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {"values": {"id": "={{ $json.lead_id }}", "status": "draft_ready"}}
+      }
+    },
+    {
+      "id": "trigger_compliance",
+      "type": "n8n-nodes-base.httpRequest",
+      "name": "Trigger Compliance Check",
+      "parameters": {
+        "method": "POST",
+        "url": "http://campaignops-api:8000/compliance/check",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "lead_id", "value": "={{ $json.lead_id }}"},
+            {"name": "asset_id", "value": "={{ $json.asset_id }}"},
+            {"name": "channel", "value": "cold_email"},
+            {"name": "message_body", "value": "={{ $json.ai_output.body }}"},
+            {"name": "contact_email", "value": "={{ $json.lead_data.email }}"},
+            {"name": "contact_region", "value": "={{ $json.lead_data.region }}"},
+            {"name": "contact_data_source", "value": "={{ $json.lead_data.data_source }}"}
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "trigger": {"main": [["get_unprocessed"]]},
+    "get_unprocessed": {"main": [["select_template"]]},
+    "select_template": {"main": [["ai_generate"]]},
+    "ai_generate": {"main": [["save_draft"]]},
+    "save_draft": {"main": [["update_lead_status"]]},
+    "update_lead_status": {"main": [["trigger_compliance"]]}
+  }
+}
