@@ -141,7 +141,7 @@ class EnrichmentPipeline:
         # Industry observation
         if profile.industry:
             observations.append(
-                f"{profile.company_name} operates in {profile.industry}"
+                f"{profile.name} operates in {profile.industry}"
                 f"{' (' + profile.sub_industry + ')' if profile.sub_industry else ''}"
             )
 
@@ -171,17 +171,17 @@ class EnrichmentPipeline:
         if profile.recent_news:
             icebreaker = f"Saw {profile.recent_news[0]}"
         elif profile.tech_stack:
-            icebreaker = f"Noticed {profile.company_name} uses {profile.tech_stack[0]}"
+            icebreaker = f"Noticed {profile.name} uses {profile.tech_stack[0]}"
         else:
-            icebreaker = f"How does {profile.company_name} handle quote follow-up today?"
+            icebreaker = f"How does {profile.name} handle quote follow-up today?"
 
-        # Lead title context
-        if lead_title and "RevOps" in lead_title:
+        lead_title_lower = lead_title.lower() if lead_title else ""
+        if "revops" in lead_title_lower or "revenue operations" in lead_title_lower:
             observations.append("RevOps leader — likely owns quote-to-cash process")
-        elif lead_title and "Sales Ops" in lead_title:
+        elif "sales ops" in lead_title_lower or "sales operations" in lead_title_lower:
             observations.append("Sales Ops leader — likely manages quoting workflow")
 
-        one_liner = observations[0] if observations else f"{profile.company_name} — {profile.industry or 'unknown industry'}"
+        one_liner = observations[0] if observations else f"{profile.name} — {profile.industry or 'unknown industry'}"
 
         return PersonalizationBrief(
             company_name=profile.name,

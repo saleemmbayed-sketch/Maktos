@@ -1,0 +1,104 @@
+bundle_id: maxasp_inside_sales_v1
+version: 0.1.0-draft
+segments:
+  - id: industrial_global_coverage_gap
+    name: Industrial Manufacturers With Global Coverage Gaps
+    priority: high
+    description: Industrial equipment or complex B2B manufacturers with international customer bases and insufficient regional or local-language sales coverage.
+    firmographics:
+      industries:
+        - Industrial equipment
+        - Machinery
+        - Automation
+        - Packaging equipment
+        - Manufacturing technology
+      size: mid_market_to_enterprise
+      geography: DACH and Europe initially; global operating footprint preferred.
+    triggers:
+      - Expansion into new regions.
+      - Under-covered installed base.
+      - Dealer or distributor dependency.
+      - High-value aftermarket or spare-parts opportunity.
+      - Sales team capacity constraints.
+    buying_committee:
+      - Chief Sales Officer
+      - VP Sales
+      - Regional Sales Director
+      - Head of Aftermarket
+      - Managing Director
+    qualification_rules:
+      - Has international customers or target prospects.
+      - Sells complex, high-value B2B products or services.
+      - Has measurable sales coverage or follow-up challenges.
+    disqualification_rules:
+      - Pure B2C business.
+      - No international sales motion.
+      - No identifiable sales leadership or CRM ownership.
+  - id: crm_visibility_adoption_gap
+    name: CRM Visibility And Adoption Gap
+    priority: medium
+    description: Industrial companies with CRM in place but limited forecast visibility, pipeline hygiene, adoption, or sales-process consistency.
+    firmographics:
+      crm_maturity: existing_crm_with_adoption_gap
+      likely_systems:
+        - Salesforce
+        - Microsoft Dynamics
+        - HubSpot
+        - Pardot/Salesforce
+    triggers:
+      - CRM rollout or migration.
+      - Forecasting inconsistency.
+      - Poor activity capture.
+      - Lack of regional pipeline visibility.
+    buying_committee:
+      - CRM Owner
+      - Salesforce Owner
+      - Revenue Operations
+      - VP Sales
+      - Sales Operations
+    qualification_rules:
+      - CRM is part of sales operating model.
+      - Sales leadership cares about visibility or adoption.
+    disqualification_rules:
+      - No CRM or no plan to use one.
+      - No sales operations owner.
+  - id: decision_maker_data_gap
+    name: Decision-Maker Data Coverage Gap
+    priority: medium
+    description: Industrial businesses with valuable account lists but incomplete contact coverage or outdated decision-maker data.
+    triggers:
+      - New market entry.
+      - Installed-base monetization.
+      - Account-based campaign planning.
+      - Low contact completeness in CRM.
+    buying_committee:
+      - Head of Sales
+      - Revenue Operations
+      - Marketing Operations
+      - Data Intelligence owner
+    qualification_rules:
+      - Has account lists or target markets.
+      - Needs validated contacts for sales execution.
+    disqualification_rules:
+      - No defined target account universe.
+      - No lawful basis or compliant data process available.
+required_data_fields:
+  account:
+    - account_name
+    - website
+    - country
+    - industry
+    - employee_count
+    - sales_region
+    - crm_system
+    - account_trigger
+  contact:
+    - first_name
+    - last_name
+    - title
+    - email
+    - linkedin_url
+    - persona
+    - country
+    - consent_or_lawful_basis
+    - suppression_status

@@ -1,0 +1,10 @@
+required_fields:
+  - bundle_id
+  - campaign_name
+  - version
+  - status
+  - objective
+  - channels
+  - execution_boundary
+safety_required:
+  execution_boundary.executable_by_campaignops: false

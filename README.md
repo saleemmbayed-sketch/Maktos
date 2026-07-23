@@ -90,6 +90,8 @@ campaignops-kernel/
 | Module | Endpoint | Description |
 |--------|----------|-------------|
 | Campaign | POST `/campaigns/spec` | Extract CampaignSpec from assets |
+| Campaign | POST `/campaigns/import-strategy-bundle` | Validate Strategy bundle and return CampaignOps review preview |
+| Campaign | POST `/campaigns/import-strategy-bundle/persist` | Persist validated Strategy bundle as draft campaign for approval |
 | Scoring | POST `/leads/score` | Score single lead |
 | Scoring | POST `/leads/score/batch` | Batch score leads |
 | Compliance | POST `/compliance/check` | Run compliance checks |

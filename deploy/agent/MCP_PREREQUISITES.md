@@ -15,6 +15,24 @@ host, configure these in your `mcp.json` or equivalent:
 
 **Why:** Create tables, run SQL, seed data, query state.
 
+**Current OpenCode setup:** This repo uses the remote Supabase MCP in `.opencode/opencode.json`:
+
+```json
+{
+  "mcp": {
+    "supabase": {
+      "type": "remote",
+      "url": "https://mcp.supabase.com/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+Restart OpenCode after changing MCP config.
+
+The older local `npx` setup below is kept as historical/alternative reference.
+
 **Install:**
 ```json
 {

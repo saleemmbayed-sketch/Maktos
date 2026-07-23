@@ -1,0 +1,11 @@
+required_fields:
+  - bundle_id
+  - version
+  - segments
+segment_required_fields:
+  - id
+  - name
+  - priority
+  - description
+  - buying_committee
+  - qualification_rules

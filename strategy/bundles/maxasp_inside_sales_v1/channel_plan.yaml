@@ -1,0 +1,90 @@
+bundle_id: maxasp_inside_sales_v1
+version: 0.1.0-draft
+selected_channels:
+  - cold_email
+  - linkedin_tasks
+  - calling_tasks
+  - crm_handoff
+  - content_asset
+channel_rationale:
+  cold_email: Controlled direct outreach to defined industrial buying committee contacts.
+  linkedin_tasks: Human-assisted research, credibility checks, and relationship context.
+  calling_tasks: High-fit account follow-up and discovery support after engagement or prioritization.
+  crm_handoff: Required for measurement, ownership, and sales follow-up.
+  content_asset: Provides proof and a low-friction CTA for complex B2B buyers.
+cold_email:
+  objective: Generate qualified replies and conversations about global inside-sales coverage gaps.
+  sequence_intent:
+    - step: 1
+      theme: Coverage gap hypothesis tied to industrial sales expansion.
+    - step: 2
+      theme: Proof-led follow-up with global/local expertise angle.
+    - step: 3
+      theme: Decision-maker data or aftermarket coverage angle based on persona.
+    - step: 4
+      theme: Polite close with opt-out and alternate owner request.
+  required_personalization_fields:
+    - account_name
+    - industry
+    - country_or_region
+    - persona
+    - account_trigger
+    - relevant_solution
+  compliance_requirements:
+    - unsubscribe_or_opt_out_text
+    - privacy_policy_reference
+    - sender_identity
+    - suppression_check
+    - lawful_basis_or_consent_field
+  campaignops_boundary:
+    - Drafts must be generated or validated by CampaignOps.
+    - Compliance gate must approve or route to review.
+    - Approval queue must clear before sending.
+    - Smartlead or configured email provider sends only after state eligibility.
+linkedin_tasks:
+  allowed_outputs:
+    - Profile research.
+    - Manual connection-note theme.
+    - Manual comment or engagement theme.
+    - Manual follow-up task after email reply or page engagement.
+  prohibited_outputs:
+    - Autonomous LinkedIn sending.
+    - Bulk automated connection requests.
+    - Platform-rule-violating scraping instructions.
+calling_tasks:
+  objective: Support high-fit accounts with human-led discovery and follow-up.
+  call_prep_fields:
+    - Account trigger.
+    - Persona pain hypothesis.
+    - Prior email touch status.
+    - Relevant proof point.
+    - CRM notes.
+  dispositions:
+    - interested
+    - not_now
+    - wrong_contact
+    - referred
+    - no_response
+    - disqualified
+crm_handoff:
+  required_fields:
+    - campaign_name
+    - bundle_id
+    - account_segment
+    - persona
+    - source_channel
+    - lead_score
+    - compliance_status
+    - approval_status
+    - reply_category
+    - sla_owner
+content_asset:
+  recommended_asset: Global Sales Coverage Gap Diagnostic
+  purpose: Give prospects a practical way to evaluate inside-sales coverage gaps.
+  status: not_created
+paid_channels:
+  status: not_in_scope_for_v1
+  reason: Paid spend requires separate budget approval.
+nurture:
+  status: later_phase
+  reason: Requires consent or approved lifecycle basis.

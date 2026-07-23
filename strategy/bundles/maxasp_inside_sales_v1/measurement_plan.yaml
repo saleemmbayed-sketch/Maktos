@@ -1,0 +1,59 @@
+bundle_id: maxasp_inside_sales_v1
+version: 0.1.0-draft
+primary_goal: Qualified B2B conversations for MAXASP Inside Sales.
+success_metrics:
+  primary:
+    - qualified_reply_rate
+    - meeting_or_discovery_call_rate
+    - target_account_engagement_rate
+  secondary:
+    - positive_reply_count
+    - referral_to_correct_owner_count
+    - decision_maker_data_completion_rate
+    - crm_handoff_completion_rate
+guardrail_metrics:
+  - bounce_rate
+  - unsubscribe_rate
+  - spam_complaint_rate
+  - negative_reply_rate
+  - compliance_review_rate
+events_required:
+  - event: lead_imported
+    owner: CampaignOps
+  - event: lead_scored
+    owner: CampaignOps
+  - event: draft_generated
+    owner: CampaignOps
+  - event: compliance_checked
+    owner: CampaignOps
+  - event: approval_completed
+    owner: CampaignOps
+  - event: email_sent
+    owner: CampaignOps / email provider
+  - event: reply_received
+    owner: CampaignOps / email provider
+  - event: reply_classified
+    owner: CampaignOps
+  - event: sla_created
+    owner: CampaignOps
+  - event: crm_synced
+    owner: CampaignOps / CRM adapter
+experiment_hypotheses:
+  - id: coverage_gap_vs_data_gap
+    hypothesis: Sales leaders respond better to regional coverage-gap messaging, while CRM/RevOps buyers respond better to data and visibility messaging.
+    variants:
+      - coverage_gap_angle
+      - decision_maker_data_angle
+    decision_metric: qualified_reply_rate
+  - id: diagnostic_offer_vs_conversation_offer
+    hypothesis: A practical coverage-gap diagnostic creates more replies than a generic discovery-call CTA.
+    variants:
+      - diagnostic_offer
+      - conversation_offer
+    decision_metric: meeting_or_discovery_call_rate
+reporting:
+  dashboard: CampaignOps / Metabase later
+  cadence: daily during pilot, weekly after first 2 weeks
+minimum_sample_notes:
+  - Avoid declaring a winner before enough sends and replies are collected.
+  - Treat early signals as directional until statistically meaningful.

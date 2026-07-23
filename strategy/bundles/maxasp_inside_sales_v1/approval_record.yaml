@@ -1,0 +1,17 @@
+bundle_id: maxasp_inside_sales_v1
+version: 0.1.0-draft
+strategy_approval:
+  status: pending
+  approved_by: null
+  approved_at: null
+compliance_approval:
+  status: pending
+  approved_by: null
+  approved_at: null
+campaignops_import_approval:
+  status: not_started
+  approved_by: null
+  approved_at: null
+notes:
+  - Draft bundle created from MAXASP public website context and Strategy Studio runbooks.
+  - Not executable until reviewed, validated, imported, compliance-checked, and approved.

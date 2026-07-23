@@ -1,0 +1,7 @@
+required_fields:
+  - bundle_id
+  - version
+  - primary_goal
+  - success_metrics
+  - guardrail_metrics
+  - events_required

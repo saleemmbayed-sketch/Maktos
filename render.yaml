@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: maktos-campaignops-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn apps.api.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHONPATH
+        value: /opt/render/project/src:/opt/render/project/src/packages
+      - key: DATABASE_URL
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: EMAIL_PROVIDER
+        value: smartlead
+      - key: SMARTLEAD_API_KEY
+        sync: false
+      - key: ENVIRONMENT
+        value: staging

@@ -1,0 +1,6 @@
+company_name,domain,industry,company_size,country,first_name,last_name,title,email,linkedin_url,region,data_source,source_date,account_trigger
+Alpine Packaging Systems,alpine-packaging.example,Manufacturing,500-1000,DE,Anna,Keller,VP Sales,anna.keller@alpine-packaging.example,https://linkedin.com/in/example-anna-keller,EU,synthetic_staging,2026-07-23,Global sales coverage gap
+Nordic Process Automation,nordic-process.example,Manufacturing,1000+,SE,Lars,Johansson,Head of Sales,lars.johansson@nordic-process.example,https://linkedin.com/in/example-lars-johansson,EU,synthetic_staging,2026-07-23,Regional expansion
+Rhine Industrial Robotics,rhine-robotics.example,Manufacturing,200-500,DE,Claudia,Weiss,Sales Operations Director,claudia.weiss@rhine-robotics.example,https://linkedin.com/in/example-claudia-weiss,EU,synthetic_staging,2026-07-23,CRM visibility gap
+Benelux Equipment Group,benelux-equipment.example,Manufacturing,500-1000,BE,Tom,Vermeulen,Regional Sales Director,tom.vermeulen@benelux-equipment.example,https://linkedin.com/in/example-tom-vermeulen,EU,synthetic_staging,2026-07-23,Under-covered installed base
+Iberia Service Machinery,iberia-service.example,Manufacturing,200-500,ES,Maria,Santos,Head of Aftermarket,maria.santos@iberia-service.example,https://linkedin.com/in/example-maria-santos,EU,synthetic_staging,2026-07-23,Aftermarket growth

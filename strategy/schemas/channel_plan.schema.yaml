@@ -1,0 +1,10 @@
+required_fields:
+  - bundle_id
+  - version
+  - selected_channels
+  - cold_email
+cold_email_required_controls:
+  - unsubscribe_or_opt_out_text
+  - privacy_policy_reference
+  - sender_identity
+  - suppression_check

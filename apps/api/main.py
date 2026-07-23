@@ -23,6 +23,12 @@ from shared.models import (
     ComplianceStatus, ReplyClassification, SLAStatus,
 )
 from campaign_spec.parser import parse_campaign_spec_from_dict
+from campaign_spec.bundle_importer import (
+    import_strategy_bundle_for_review,
+    persist_strategy_bundle_for_review,
+    StrategyBundleImportResult,
+    PersistedStrategyBundleImportResult,
+)
 from scoring.engine import score_lead, batch_score_leads
 from compliance.gate import run_compliance_checks
 from draft_generator.engine import generate_draft, fill_template, select_template
@@ -87,11 +93,33 @@ def health_check():
 class CampaignSpecRequest(BaseModel):
     assets: dict
 
+class StrategyBundleImportRequest(BaseModel):
+    bundle_path: str
+
 @app.post("/campaigns/spec", response_model=CampaignSpec)
 def extract_campaign_spec(request: CampaignSpecRequest):
     """Extract a structured CampaignSpec from uploaded campaign assets."""
     try:
         return parse_campaign_spec_from_dict(request.assets)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+@app.post("/campaigns/import-strategy-bundle", response_model=StrategyBundleImportResult)
+def import_strategy_bundle(request: StrategyBundleImportRequest):
+    """Validate a Strategy Studio bundle and return a CampaignOps review preview."""
+    try:
+        return import_strategy_bundle_for_review(request.bundle_path)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+@app.post("/campaigns/import-strategy-bundle/persist", response_model=PersistedStrategyBundleImportResult)
+async def persist_strategy_bundle(request: StrategyBundleImportRequest):
+    """Persist a validated Strategy Studio bundle as a draft campaign for review."""
+    try:
+        from shared.database import get_db
+
+        db = await get_db()
+        return await persist_strategy_bundle_for_review(request.bundle_path, db)
     except Exception as e:
         raise HTTPException(status_code=422, detail=str(e))
 

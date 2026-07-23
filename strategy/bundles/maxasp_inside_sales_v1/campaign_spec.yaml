@@ -1,0 +1,60 @@
+bundle_id: maxasp_inside_sales_v1
+campaign_name: MAXASP Inside Sales Global Coverage Campaign v1
+version: 0.1.0-draft
+status: draft_not_approved
+owner_stream: strategy_studio
+created_from:
+  - strategy/brand/MAXASP_CONTEXT.md
+  - strategy/runbooks/MAXASP_B2B_NEXUS_SPRINT.md
+  - strategy/runbooks/MAXASP_B2B_CHANNEL_PLAYBOOK.md
+primary_solution: inside_sales
+company:
+  name: MAXASP
+  website: https://www.maxasp.com
+  positioning: From outsourcing to intelligent revenue orchestration for industrial equipment and complex industries in global markets.
+objective:
+  primary: Generate qualified conversations with industrial sales leaders about global inside-sales coverage gaps.
+  secondary:
+    - Validate account pain around local-language coverage, follow-up consistency, CRM usage, and decision-maker access.
+    - Create a sales-ready handoff for interested accounts.
+target_market:
+  industries:
+    - Industrial equipment manufacturing
+    - Complex B2B manufacturing
+    - Aftermarket and service-led industrial businesses
+  geography:
+    value: DACH and Europe
+    assumption: true
+  company_profile:
+    - Mid-market to enterprise
+    - International customer or prospect base
+    - Distributed sales teams or dealer/regional coverage needs
+    - CRM visibility or adoption challenges
+offer:
+  type: diagnostic_conversation
+  description: Discuss global inside-sales coverage gaps and opportunities to expand reach with embedded native-speaking inside-sales capability.
+channels:
+  primary:
+    - cold_email
+  supporting:
+    - linkedin_tasks
+    - calling_tasks
+    - crm_handoff
+    - content_asset
+execution_boundary:
+  executable_by_campaignops: false
+  reason: Draft strategy bundle has not passed schema validation, compliance review, human approval, or CampaignOps ingestion.
+required_before_execution:
+  - Validate structured bundle against schemas.
+  - Confirm approved target geography and vertical.
+  - Confirm outbound proof claims.
+  - Import target list.
+  - Run CampaignOps scoring.
+  - Run compliance gate.
+  - Complete approval queue.
+  - Verify audit logging.
+open_questions:
+  - Which geography should be first?
+  - Which industrial vertical should be prioritized?
+  - Which proof points are approved for outbound copy?
+  - Which sender identity and email domain should be used?

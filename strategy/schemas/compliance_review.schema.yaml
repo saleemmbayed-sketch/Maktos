@@ -1,0 +1,8 @@
+required_fields:
+  - bundle_id
+  - version
+  - status
+  - execution_approved
+  - risks
+safety_required:
+  execution_approved: false

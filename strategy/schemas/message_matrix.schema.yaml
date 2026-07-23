@@ -1,0 +1,7 @@
+required_fields:
+  - bundle_id
+  - version
+  - message_pillars
+  - personas
+  - proof_points
+claim_rule: Proof claims must be source-mapped or marked as assumptions.

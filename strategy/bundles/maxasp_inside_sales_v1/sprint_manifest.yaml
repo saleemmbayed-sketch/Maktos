@@ -1,0 +1,30 @@
+bundle_id: maxasp_inside_sales_v1
+version: 0.1.0-draft
+status: draft_not_approved_not_executable
+source_files:
+  - strategy/brand/MAXASP_CONTEXT.md
+  - strategy/runbooks/MAXASP_B2B_NEXUS_SPRINT.md
+  - strategy/runbooks/MAXASP_B2B_CHANNEL_PLAYBOOK.md
+  - strategy/templates/MAXASP_B2B_CAMPAIGN_BRIEF.md
+generated_files:
+  - campaign_spec.yaml
+  - icp_segments.yaml
+  - message_matrix.yaml
+  - channel_plan.yaml
+  - measurement_plan.yaml
+  - compliance_review.yaml
+  - STRATEGIST_BUNDLE.md
+  - approval_record.yaml
+approvals:
+  strategy_owner: pending
+  compliance_owner: pending
+  campaignops_ingestion: not_started
+execution_boundary:
+  campaignops_execution_allowed: false
+  reason: Draft strategy bundle only.
+next_steps:
+  - Review and answer open questions.
+  - Create schemas for structured bundle validation.
+  - Validate bundle files.
+  - Build or map ingestion into CampaignOps.
+  - Run controlled test path.

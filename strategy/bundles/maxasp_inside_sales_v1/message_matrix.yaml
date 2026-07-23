@@ -1,0 +1,73 @@
+bundle_id: maxasp_inside_sales_v1
+version: 0.1.0-draft
+message_pillars:
+  - id: global_coverage
+    title: Global Coverage With Local Expertise
+    message: MAXASP helps industrial companies extend sales reach with native-speaking teams embedded into the sales organization.
+    proof_required: true
+  - id: revenue_orchestration
+    title: Intelligent Revenue Orchestration
+    message: Inside Sales, CRM Consulting, and Data Intelligence work together to identify, win, and grow opportunities.
+    proof_required: true
+  - id: decision_maker_access
+    title: Better Decision-Maker Coverage
+    message: High-quality customer and prospect data helps sales teams engage the right people faster.
+    proof_required: true
+  - id: crm_visibility
+    title: Better CRM Visibility And Adoption
+    message: CRM implementation and adoption improve customer engagement, pipeline visibility, and forecasting.
+    proof_required: true
+personas:
+  - persona: Chief Sales Officer
+    likely_pains:
+      - Global sales coverage is uneven across regions.
+      - Sales teams do not have enough local-language capacity.
+      - Forecast visibility depends on inconsistent CRM usage.
+    value_proposition: Extend market coverage and create more consistent sales execution without building every local team from scratch.
+    cold_email_angle: Ask whether regional coverage gaps or follow-up capacity are limiting pipeline creation.
+    objection_handling:
+      - objection: We already have regional teams.
+        response_theme: Position MAXASP as embedded capacity for coverage gaps, data-driven outreach, and targeted initiatives.
+      - objection: Outsourcing does not fit our model.
+        response_theme: Emphasize embedded, client-specialized teams rather than generic outsourcing.
+  - persona: Head of Aftermarket
+    likely_pains:
+      - Installed-base opportunities are not consistently followed up.
+      - Spare parts and service revenue depend on fragmented local coverage.
+      - Decision-maker data is incomplete or stale.
+    value_proposition: Improve aftermarket reach through focused inside-sales coverage and better decision-maker data.
+    cold_email_angle: Lead with under-covered installed-base or aftermarket follow-up opportunity.
+    objection_handling:
+      - objection: Our dealers own the relationship.
+        response_theme: Frame outreach as coverage support and data intelligence, not channel conflict.
+  - persona: CRM / Revenue Operations Owner
+    likely_pains:
+      - CRM adoption is inconsistent.
+      - Pipeline data is incomplete.
+      - Sales teams lack validated contact data.
+    value_proposition: Connect CRM adoption, data quality, and sales execution into a measurable operating model.
+    cold_email_angle: Ask whether CRM visibility is limited by adoption or decision-maker coverage.
+    objection_handling:
+      - objection: This is a system issue.
+        response_theme: Position MAXASP at the intersection of CRM process, data, and inside-sales execution.
+proof_points:
+  - claim: 20+ years of excellence.
+    source: MAXASP website.
+    outbound_status: needs_internal_approval
+  - claim: Trusted by Syntegon, Hartmann, Sartorius, Bühler, Premier Tech, and BOBST.
+    source: MAXASP website logos.
+    outbound_status: needs_internal_approval
+  - claim: EUR 44M aftermarket order intake in 2025.
+    source: MAXASP website.
+    outbound_status: needs_internal_approval
+  - claim: EUR 515M qualified new equipment pipeline in 2025.
+    source: MAXASP website.
+    outbound_status: needs_internal_approval
+  - claim: More than 11K decision-maker interactions in Q1 2026.
+    source: MAXASP website.
+    outbound_status: needs_internal_approval
+restricted_claims:
+  - Guaranteed revenue lift.
+  - Guaranteed meetings or pipeline.
+  - Unverified customer-specific results.
+  - Claims that imply customer endorsement beyond approved public proof.

@@ -1,0 +1,43 @@
+bundle_id: maxasp_inside_sales_v1
+version: 0.1.0-draft
+status: draft_strategy_review_only
+execution_approved: false
+risks:
+  - id: gdpr_outbound_basis
+    severity: high
+    description: Cold email to European contacts requires documented lawful basis or consent model.
+    mitigation: Include consent_or_lawful_basis field, suppression checks, privacy reference, and opt-out text before sending.
+  - id: proof_claim_approval
+    severity: medium
+    description: Website proof points must be approved for outbound use and phrased accurately.
+    mitigation: Confirm internally approved proof language before executable drafts.
+  - id: customer_logo_usage
+    severity: medium
+    description: Customer names/logos shown on website may not automatically be approved for cold outbound copy.
+    mitigation: Use only approved customer references or generalize as public website proof.
+  - id: linkedin_automation
+    severity: high
+    description: LinkedIn actions must remain human tasks, not automated sending.
+    mitigation: Generate task recommendations only.
+  - id: deliverability
+    severity: medium
+    description: Cold email volume and sender/domain readiness must be verified before launch.
+    mitigation: Confirm sender identity, domain health, list quality, and email provider configuration.
+required_campaignops_checks:
+  - unsubscribe_check
+  - privacy_policy_check
+  - suppression_check
+  - sender_identity_check
+  - claims_check
+  - tone_check
+  - geography_and_lawful_basis_check
+approval_required:
+  - campaign_owner
+  - compliance_reviewer
+  - proof_claim_owner
+not_executable_reasons:
+  - Target list missing.
+  - Sender identity missing.
+  - Proof claims not internally approved.
+  - Structured schemas not validated.
+  - CampaignOps import not run.
