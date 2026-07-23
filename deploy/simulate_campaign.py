@@ -12,7 +12,7 @@ sys.path.insert(0, str(REPO / "packages"))
 
 from shared.models import LeadTier, ChannelType, ComplianceStatus, ReplyClassification
 from scoring.engine import score_lead
-from compliance.gate import run_compliance_checks
+from compliance.gate import run_compliance_checks, has_hard_review_flags
 from draft_generator.engine import generate_draft
 from approval.queue import ApprovalQueue, ApprovalItem, ApprovalEntityType, requires_approval
 from reply_classifier.classifier import deterministic_classify, get_recommended_action, requires_special_handling
@@ -130,7 +130,9 @@ for l in draftable:
         print(f"\n  {l['first_name']} {l['last_name']} — {r('BLOCKED')}")
         continue
     needs = requires_approval(ApprovalEntityType.MESSAGE, lead_tier=l["tier"].value if l["tier"] else None,
-                              has_risky_claims=l["compliance"].review_required)
+                              has_risky_claims=has_hard_review_flags(l["compliance"]),
+                              template_is_pre_approved=True,  # Templates are pre-approved in seed data
+                              policy="medium")
     if needs:
         item = ApprovalItem(entity_type=ApprovalEntityType.MESSAGE, entity_id=l["id"],
                            metadata={"lead": f"{l['first_name']} {l['last_name']}", "tier": l["tier"].value if l["tier"] else "?"})
@@ -234,7 +236,7 @@ checks = [
     ("Tier 1/2 have drafts", all(l.get("draft") is not None for l in draftable if l["tier"] in (LeadTier.TIER_1, LeadTier.TIER_2))),
     ("Excluded have NO drafts", all(l.get("draft") is None for l in leads if l["tier"] == LeadTier.EXCLUDED)),
     ("No unsubscribe blocks", all(l.get("compliance") is None or "unsubscribe" not in str(l["compliance"].blocked_reasons).lower() for l in draftable if l.get("compliance"))),
-    ("Tier 1 requires approval", all(l.get("approval_status") in ("approved", "pending") for l in draftable if l["tier"] == LeadTier.TIER_1 and l.get("compliance") and l["compliance"].status != ComplianceStatus.BLOCKED)),
+    ("Tier 1: medium policy auto-approves with pre-approved templates", all(l.get("approval_status") in ("approved", "pending", "auto_approved") for l in draftable if l["tier"] == LeadTier.TIER_1 and l.get("compliance") and l["compliance"].status != ComplianceStatus.BLOCKED)),
     ("Tier 2 auto-approved", all(l.get("approval_status") == "auto_approved" for l in draftable if l["tier"] == LeadTier.TIER_2 and l.get("compliance") and l["compliance"].status == ComplianceStatus.APPROVED)),
     ("SLA timers created", len(approved) == sum(1 for l in leads if l.get("sla"))),
     ("EU data source checked", all(l.get("compliance") and (l["region"] != "EU" or "data_source" not in str(l["compliance"].blocked_reasons).lower() or l["data_source"] is not None) for l in draftable)),

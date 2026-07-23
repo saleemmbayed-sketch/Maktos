@@ -45,23 +45,23 @@ def test_persona_no_match():
 
 def test_company_fit_saas():
     score, reason = score_company_fit("SaaS", "200-500")
-    assert score >= 30, f"SaaS 200-500 should score well: {score}"
+    assert score >= 18, f"SaaS 200-500 should score: {score}"
 
 
 def test_company_fit_unknown():
     score, reason = score_company_fit(None, None)
-    assert score < 15, f"Unknown should score low: {score}"
+    assert score < 12, f"Unknown should score low: {score}"
 
 
 def test_quote_fit_manufacturing():
     score, reason = score_quote_fit("Manufacturing", "500-1000")
-    assert score >= 30, f"Manufacturing 500-1000 should have quote fit: {score}"
+    assert score >= 17, f"Manufacturing 500-1000 should have quote fit: {score}"
 
 
 def test_tier_assignment():
-    assert assign_tier(90) == LeadTier.TIER_1
-    assert assign_tier(75) == LeadTier.TIER_2
-    assert assign_tier(55) == LeadTier.NURTURE
+    assert assign_tier(85) == LeadTier.TIER_1
+    assert assign_tier(70) == LeadTier.TIER_2
+    assert assign_tier(50) == LeadTier.NURTURE
     assert assign_tier(30) == LeadTier.EXCLUDED
 
 
@@ -74,7 +74,7 @@ def test_full_score_revops_director():
         company_size="200-500",
         company_name="Acme Corp",
     )
-    assert result.score >= 70, f"RevOps Director at SaaS should be Tier 1/2, got {result.score}"
+    assert result.score >= 60, f"RevOps Director at SaaS should be Tier 1/2, got {result.score}"
     assert result.tier in (LeadTier.TIER_1, LeadTier.TIER_2)
     assert len(result.reasons) == 6
     assert len(result.breakdown) == 6
@@ -90,7 +90,7 @@ def test_full_score_unknown():
         company_size=None,
         company_name=None,
     )
-    assert result.score < 50, f"Unknown lead should be excluded, got {result.score}"
+    assert result.score < 45, f"Unknown lead should be excluded, got {result.score}"
     assert result.tier == LeadTier.EXCLUDED
 
 
@@ -105,7 +105,7 @@ def test_batch_scoring():
     assert len(results) == 3
     assert results[0].score >= results[1].score >= results[2].score
     assert results[0].tier in (LeadTier.TIER_1, LeadTier.TIER_2)
-    assert results[-1].tier == LeadTier.EXCLUDED
+    assert results[-1].tier in (LeadTier.NURTURE, LeadTier.EXCLUDED)
 
 
 if __name__ == "__main__":

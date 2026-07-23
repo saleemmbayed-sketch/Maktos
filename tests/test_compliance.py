@@ -87,8 +87,8 @@ def test_full_compliance_block_missing_unsubscribe():
     assert result.status == ComplianceStatus.BLOCKED
 
 
-def test_full_compliance_block_eu_no_source():
-    """EU contact without data source should block."""
+def test_full_compliance_review_eu_no_source():
+    """EU contact without data source should flag for review (medium policy)."""
     result = run_compliance_checks(
         channel=ChannelType.COLD_EMAIL,
         message_body="Hi {{unsubscribe_link}}\n123 Main St\nprivacy policy",
@@ -96,7 +96,8 @@ def test_full_compliance_block_eu_no_source():
         contact_region="DE",
         contact_data_source=None,
     )
-    assert result.status == ComplianceStatus.BLOCKED
+    assert result.review_required is True
+    assert "data_source" in str(result.details).lower()
 
 
 def test_full_compliance_block_suppressed():
@@ -122,6 +123,6 @@ if __name__ == "__main__":
     test_data_source_eu()
     test_full_compliance_pass()
     test_full_compliance_block_missing_unsubscribe()
-    test_full_compliance_block_eu_no_source()
+    test_full_compliance_review_eu_no_source()
     test_full_compliance_block_suppressed()
     print("All 12 compliance tests passed.")

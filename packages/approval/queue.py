@@ -104,6 +104,8 @@ def requires_approval(
     lead_tier: Optional[str] = None,
     is_first: bool = False,
     has_risky_claims: bool = False,
+    template_is_pre_approved: bool = False,
+    policy: str = "medium",
 ) -> bool:
     """Determine if an entity requires human approval.
 
@@ -112,24 +114,49 @@ def requires_approval(
         lead_tier: Lead tier (tier_1, tier_2, nurture, excluded)
         is_first: Is this the first of this type?
         has_risky_claims: Does the message contain risky claims?
+        template_is_pre_approved: Is the template already approved?
+        policy: "strict", "medium", or "permissive"
 
     Returns:
         True if human approval is required.
+    
+    Medium policy (default):
+      - Tier 1 + risky claims → requires approval
+      - Tier 1 + pre-approved template + no risky claims → auto-approve
+      - Tier 2 → auto-approve
+      - First campaign/sequence/ad/budget → always requires approval
+    
+    Strict policy:
+      - All Tier 1 → requires approval
+      - All new items → requires approval
+    
+    Permissive policy:
+      - Only campaigns and budget actions require approval
     """
     if entity_type == ApprovalEntityType.CAMPAIGN:
-        return is_first
+        return is_first or policy == "strict"
 
     if entity_type == ApprovalEntityType.SEQUENCE:
-        return is_first
+        if policy == "permissive":
+            return False
+        return is_first or policy == "strict"
 
     if entity_type == ApprovalEntityType.MESSAGE:
-        # Tier 1 always needs approval
-        if lead_tier == "tier_1":
-            return True
-        # Risky claims always need approval
+        if policy == "permissive":
+            return has_risky_claims  # Only risky claims trigger review
+        
+        # Medium/strict: risky claims always need approval
         if has_risky_claims:
             return True
-        # Tier 2: auto-approve after compliance pass
+        
+        # Tier 1 handling
+        if lead_tier == "tier_1":
+            if policy == "strict":
+                return True
+            # Medium: auto-approve if template is pre-approved
+            return not template_is_pre_approved
+        
+        # Tier 2: auto-approve
         return False
 
     if entity_type in (ApprovalEntityType.AD_COPY, ApprovalEntityType.BUDGET_ACTION):

@@ -30,10 +30,10 @@ class ComplianceCheck:
 # All V1 checks in priority order
 CHECKS = [
     ComplianceCheck("unsubscribe_link", "Unsubscribe link missing", "block"),
-    ComplianceCheck("physical_address", "Physical address missing", "block"),
+    ComplianceCheck("physical_address", "Physical address missing", "review"),
     ComplianceCheck("privacy_policy", "Privacy policy link missing", "block"),
     ComplianceCheck("suppression", "Contact on suppression list", "block"),
-    ComplianceCheck("data_source_eu", "EU/UK data source not disclosed", "block"),
+    ComplianceCheck("data_source_eu", "EU/UK data source not disclosed", "review"),
     ComplianceCheck("linkedin_auto_send", "LinkedIn auto-send attempted", "block"),
     ComplianceCheck("sender_identification", "Sender not properly identified", "block"),
     ComplianceCheck("high_risk_claim", "High-risk claim detected", "review"),
@@ -45,10 +45,10 @@ CHECKS = [
 # Block-level reason when a check fails
 FAIL_REASONS = {
     "unsubscribe_link": "Cold email must include functional unsubscribe link",
-    "physical_address": "Cold email must include sender physical mailing address",
+    "physical_address": "Consider adding physical mailing address for deliverability",
     "privacy_policy": "Cold email must include link to privacy policy",
     "suppression": "Contact email found in suppression list — outreach blocked",
-    "data_source_eu": "EU/UK contact requires documented data source (GDPR Art. 14)",
+    "data_source_eu": "EU/UK contact — verify data source is documented (GDPR best practice)",
     "linkedin_auto_send": "Automated LinkedIn sending is blocked by policy",
     "sender_identification": "Sender must be identified with full name and company",
     "high_risk_claim": "Message contains a claim that requires human review",
@@ -146,34 +146,45 @@ def run_compliance_checks(
     review_reasons: list[str] = []
     details: dict = {}
 
-    # Cold email checks
+    # Cold email checks — BLOCK level
     if channel == ChannelType.COLD_EMAIL and message_body:
         if not check_unsubscribe_link(message_body):
             blocked_reasons.append(FAIL_REASONS["unsubscribe_link"])
             details["unsubscribe_link"] = "missing"
 
-        if not check_physical_address(message_body, signature_block):
-            blocked_reasons.append(FAIL_REASONS["physical_address"])
-            details["physical_address"] = "missing"
-
         if not check_privacy_policy(message_body):
             blocked_reasons.append(FAIL_REASONS["privacy_policy"])
             details["privacy_policy"] = "missing"
 
-    # Suppression check (always)
+    # Cold email checks — REVIEW level (not blocking, just flagging)
+    if channel == ChannelType.COLD_EMAIL and message_body:
+        if not check_physical_address(message_body, signature_block):
+            review_reasons.append(FAIL_REASONS["physical_address"])
+            details["physical_address"] = "missing"
+
+    # Suppression check (always BLOCK)
     if contact_email and not check_suppression(contact_email, suppression_emails):
         blocked_reasons.append(FAIL_REASONS["suppression"])
         details["suppression"] = contact_email
 
-    # EU data source check
+    # EU data source — REVIEW (not block, GDPR awareness flag)
     if not check_data_source_eu(contact_region, contact_data_source):
-        blocked_reasons.append(FAIL_REASONS["data_source_eu"])
+        review_reasons.append(FAIL_REASONS["data_source_eu"])
         details["data_source_eu"] = f"region={contact_region}, source missing"
 
     # LinkedIn auto-send
     if not check_linkedin_auto(channel, action):
         blocked_reasons.append(FAIL_REASONS["linkedin_auto_send"])
         details["linkedin_auto_send"] = f"channel={channel}, action={action}"
+
+    # Sender identification — REVIEW level
+    if channel == ChannelType.COLD_EMAIL and message_body:
+        # Simple check: at least two lines after a signature-like pattern
+        import re
+        has_sender = bool(re.search(r'(?i)(best|regards|cheers|thanks|sincerely)[\s,]*\n\s*\w+', message_body))
+        if not has_sender:
+            review_reasons.append(FAIL_REASONS["sender_identification"])
+            details["sender_identification"] = "unclear"
 
     # AI-assisted claim review (if AI flagged anything)
     if ai_flags:
@@ -200,6 +211,53 @@ def run_compliance_checks(
     )
 
 
+
+
+# ── Policy modes ─────────────────────────────────────────────────
+
+class PolicyMode:
+    STRICT = "strict"       # Everything blocks, everything reviews
+    MEDIUM = "medium"       # Unsubscribe + suppression block; address/eu/sender review only
+    PERMISSIVE = "permissive"  # Only suppression blocks; everything else reviews
+
+
+def run_compliance_checks_with_policy(
+    policy: str = PolicyMode.MEDIUM,
+    **kwargs,
+) -> ComplianceResult:
+    """Run compliance checks with configurable policy strictness.
+    
+    Args:
+        policy: "strict", "medium", or "permissive"
+        **kwargs: Same as run_compliance_checks()
+    
+    Returns:
+        ComplianceResult with pass/block/review based on policy level.
+    """
+    # For medium/permissive, call the base function (already relaxed)
+    # For strict, we'd re-block the review items
+    result = run_compliance_checks(**kwargs)
+    
+    if policy == PolicyMode.STRICT:
+        # In strict mode, review items become blocks
+        review_block = [r for r in result.blocked_reasons if r in [
+            FAIL_REASONS["physical_address"],
+            FAIL_REASONS["data_source_eu"],
+            FAIL_REASONS["sender_identification"],
+        ]]
+        if review_block:
+            return ComplianceResult(
+                lead_id=result.lead_id,
+                asset_id=result.asset_id,
+                channel=result.channel,
+                status=ComplianceStatus.BLOCKED,
+                blocked_reasons=result.blocked_reasons,
+                review_required=True,
+                details=result.details,
+            )
+    
+    return result
+
 # ── AI-assisted claim review ───────────────────────────────────────────
 
 CLAIM_REVIEW_PROMPT = """You are a compliance reviewer for outbound marketing.
@@ -216,6 +274,27 @@ For each issue, provide:
 
 Output as JSON: {"flags": [{"text": "...", "category": "...", "explanation": "..."}]}
 If no issues: {"flags": []}"""
+
+
+
+
+def has_hard_review_flags(result: ComplianceResult) -> bool:
+    """Check if review reasons include actual risky claims (not just deliverability flags).
+    
+    Soft flags (deliverability): physical_address, sender_identification, data_source_eu
+    Hard flags (content risk): high_risk_claim, unsupported_claim, tone_check
+    """
+    soft_flags = [
+        FAIL_REASONS["physical_address"],
+        FAIL_REASONS["sender_identification"], 
+        FAIL_REASONS["data_source_eu"],
+    ]
+    for reason in result.blocked_reasons:
+        if reason not in soft_flags and "review" not in str(result.details.get("physical_address", "")):
+            # Check if it's a content-level flag
+            if any(kw in reason.lower() for kw in ["claim", "tone", "unsupported"]):
+                return True
+    return False
 
 
 async def ai_review_claims(

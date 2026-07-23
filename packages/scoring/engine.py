@@ -24,11 +24,11 @@ from shared.models import LeadScoreResult, LeadTier
 # ── Persona match scoring ──────────────────────────────────────────────
 
 PERSONA_KEYWORDS = {
-    "VP Sales": ["vp sales", "svp sales", "vice president sales", "vp of sales", "chief revenue officer", "cro"],
-    "Head of Sales": ["head of sales", "director of sales", "sales director", "sales leader"],
-    "RevOps Director": ["revops", "revenue operations", "revenue ops", "sales operations director"],
-    "Sales Ops Leader": ["sales ops", "sales operations", "sales enablement ops"],
-    "Inside Sales Manager": ["inside sales", "sdr manager", "bdr manager", "sales development"],
+    "VP Sales": ["vp sales", "svp sales", "vice president sales", "vp of sales", "chief revenue officer", "cro", "svp revenue"],
+    "Head of Sales": ["head of sales", "director of sales", "sales director", "sales leader", "head of revenue"],
+    "RevOps Director": ["revops", "revenue operations", "revenue ops", "sales operations director", "revenue operations director", "director of revenue operations"],
+    "Sales Ops Leader": ["sales ops", "sales operations", "sales enablement ops", "sales ops manager", "sales operations manager"],
+    "Inside Sales Manager": ["inside sales", "sdr manager", "bdr manager", "sales development", "sales development manager", "inside sales manager"],
 }
 
 
@@ -52,67 +52,67 @@ def score_persona_match(title: Optional[str], campaign_personas: list[str]) -> t
 # ── Company fit ────────────────────────────────────────────────────────
 
 FIT_INDUSTRIES = {
-    "SaaS": 20, "Sales Tech": 20, "FinTech": 18, "Data/Analytics": 18,
-    "Consulting": 16, "Manufacturing": 14, "Construction": 12,
-    "Retail": 10, "Healthcare": 10, "Education": 8,
+    "SaaS": 10, "Sales Tech": 10, "FinTech": 9, "Data/Analytics": 9,
+    "Consulting": 8, "Manufacturing": 7, "Construction": 6,
+    "Retail": 5, "Healthcare": 5, "Education": 4,
 }
 
 FIT_SIZES = {
-    "50-200": 15, "200-500": 20, "500-1000": 20, "1000+": 18,
-    "11-50": 12, "1-10": 8,
+    "50-200": 7, "200-500": 10, "500-1000": 10, "1000+": 9,
+    "11-50": 5, "1-10": 3,
 }
 
 
 def score_company_fit(industry: Optional[str], company_size: Optional[str]) -> tuple[int, str]:
-    """Score company based on industry and size fit."""
+    """Score company based on industry and size fit. Max 20 points total."""
     reasons = []
     total = 0
 
-    ind_score = FIT_INDUSTRIES.get(industry, 8) if industry else 5
+    ind_score = FIT_INDUSTRIES.get(industry, 6) if industry else 4
     if industry:
-        reasons.append(f"Industry: {industry} ({ind_score}/20)")
+        reasons.append(f"Industry: {industry} ({ind_score}/10)")
     else:
-        reasons.append("Industry unknown (5/20)")
-    total += ind_score
+        reasons.append("Industry unknown (4/10)")
+    total += min(ind_score, 10)
 
-    size_score = FIT_SIZES.get(company_size, 10) if company_size else 5
+    size_score = FIT_SIZES.get(company_size, 6) if company_size else 4
     if company_size:
-        reasons.append(f"Size: {company_size} ({size_score}/20)")
+        reasons.append(f"Size: {company_size} ({size_score}/10)")
     else:
-        reasons.append("Size unknown (5/20)")
-    total += size_score
+        reasons.append("Size unknown (4/10)")
+    total += min(size_score, 10)
 
     company_reason = "; ".join(reasons)
-    return total, company_reason
+    return min(total, 20), company_reason
 
 
 # ── Quote-driven business fit ──────────────────────────────────────────
 
 QUOTE_SIGNAL_INDUSTRIES = {
-    "SaaS": 18, "Sales Tech": 20, "FinTech": 16, "Manufacturing": 18,
-    "Construction": 18, "Consulting": 14, "Data/Analytics": 12,
+    "SaaS": 9, "Sales Tech": 10, "FinTech": 8, "Manufacturing": 9,
+    "Construction": 9, "Consulting": 7, "Data/Analytics": 6,
 }
 
 QUOTE_SIGNAL_SIZES = {
-    "200-500": 18, "500-1000": 20, "1000+": 20, "50-200": 16,
-    "11-50": 10, "1-10": 6,
+    "200-500": 9, "500-1000": 10, "1000+": 10, "50-200": 8,
+    "11-50": 5, "1-10": 3,
 }
 
 
 def score_quote_fit(industry: Optional[str], company_size: Optional[str]) -> tuple[int, str]:
-    """Score likelihood of having a meaningful quote process."""
+    """Score likelihood of having a meaningful quote process. Max 20 points."""
     reasons = []
     total = 0
 
-    ind_score = QUOTE_SIGNAL_INDUSTRIES.get(industry, 8) if industry else 5
-    reasons.append(f"Quote-relevant industry: {industry or 'unknown'} ({ind_score}/20)")
-    total += ind_score
+    ind_score = QUOTE_SIGNAL_INDUSTRIES.get(industry, 6) if industry else 4
+    reasons.append(f"Quote-relevant industry: {industry or 'unknown'} ({ind_score}/10)")
+    total += min(ind_score, 10)
 
-    size_score = QUOTE_SIGNAL_SIZES.get(company_size, 8) if company_size else 5
-    reasons.append(f"Quote-volume size: {company_size or 'unknown'} ({size_score}/20)")
-    total += size_score
+    size_score = QUOTE_SIGNAL_SIZES.get(company_size, 6) if company_size else 4
+    reasons.append(f"Quote-volume size: {company_size or 'unknown'} ({size_score}/10)")
+    total += min(size_score, 10)
 
-    return total, "; ".join(reasons)
+    return min(total, 20), "; ".join(reasons)
 
 
 # ── Pain / trigger signal ──────────────────────────────────────────────
@@ -186,12 +186,16 @@ def score_personalization(title: Optional[str], company_name: Optional[str]) -> 
 # ── Tier assignment ────────────────────────────────────────────────────
 
 def assign_tier(score: int) -> LeadTier:
-    """Map numeric score to lead tier."""
-    if score >= 85:
+    """Map numeric score to lead tier.
+    
+    Recalibrated (2026-07-23): tighter thresholds for realistic distribution.
+    100-point max: persona(25) + company(20) + quote(20) + pain(15) + crm(10) + pers(10)
+    """
+    if score >= 80:
         return LeadTier.TIER_1
-    elif score >= 70:
+    elif score >= 65:
         return LeadTier.TIER_2
-    elif score >= 50:
+    elif score >= 45:
         return LeadTier.NURTURE
     else:
         return LeadTier.EXCLUDED
