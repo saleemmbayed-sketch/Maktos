@@ -37,6 +37,7 @@ from approval.queue import (
     ApprovalStatus as ApprovalItemStatus,
     requires_approval as check_requires_approval,
 )
+from approval.readiness import evaluate_campaign_readiness
 from reply_classifier.classifier import (
     classify_reply, deterministic_classify,
     get_recommended_action, requires_special_handling,
@@ -122,6 +123,76 @@ async def persist_strategy_bundle(request: StrategyBundleImportRequest):
         return await persist_strategy_bundle_for_review(request.bundle_path, db)
     except Exception as e:
         raise HTTPException(status_code=422, detail=str(e))
+
+
+async def collect_campaign_readiness(campaign_id: UUID, db) -> dict:
+    """Collect and evaluate persisted campaign readiness without side effects."""
+    campaign = await db.fetchrow(
+        "SELECT id, name, status FROM campaigns WHERE id = $1",
+        campaign_id,
+    )
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    approval = await db.fetchrow(
+        """
+        SELECT id, entity_type, status
+        FROM approvals
+        WHERE entity_type = 'campaign' AND entity_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        campaign_id,
+    )
+    lead_metrics = await db.fetchrow(
+        """
+        SELECT
+            COUNT(*)::int AS lead_count,
+            COUNT(*) FILTER (WHERE l.status <> 'scored')::int AS unscored_count,
+            COUNT(*) FILTER (WHERE a.research_status <> 'enriched')::int AS unenriched_count,
+            COUNT(*) FILTER (WHERE cc.status IS NULL)::int AS missing_compliance_count,
+            COUNT(*) FILTER (WHERE cc.status = 'blocked')::int AS blocked_compliance_count
+        FROM leads l
+        JOIN accounts a ON l.account_id = a.id
+        LEFT JOIN LATERAL (
+            SELECT status
+            FROM compliance_checks
+            WHERE lead_id = l.id
+            ORDER BY checked_at DESC
+            LIMIT 1
+        ) cc ON true
+        WHERE l.campaign_id = $1
+        """,
+        campaign_id,
+    )
+    asset_metrics = await db.fetchrow(
+        "SELECT COUNT(*)::int AS count FROM campaign_assets WHERE campaign_id = $1",
+        campaign_id,
+    )
+
+    metrics = dict(lead_metrics or {})
+    metrics["message_asset_count"] = asset_metrics["count"] if asset_metrics else 0
+    result = evaluate_campaign_readiness(
+        dict(campaign),
+        dict(approval) if approval else None,
+        metrics,
+    )
+    return {
+        "campaign_id": result.campaign_id,
+        "ready": result.ready,
+        "blockers": result.blockers,
+        "warnings": result.warnings,
+        "metrics": result.metrics,
+    }
+
+
+@app.get("/campaigns/{campaign_id}/readiness")
+async def get_campaign_readiness(campaign_id: UUID):
+    """Read-only readiness gate for n8n and deployment checks."""
+    from shared.database import get_db
+
+    db = await get_db()
+    return await collect_campaign_readiness(campaign_id, db)
 
 
 # ═══════════════════════════════════════════════════════════════════
