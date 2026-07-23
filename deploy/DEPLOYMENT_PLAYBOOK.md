@@ -2,7 +2,7 @@
 
 ## What you have
 
-42 files, ~4,800 lines of Python, 8 n8n workflows, a full Postgres schema,
+89 files, ~3,300 lines of Python, 10 n8n workflows, a full Postgres schema,
 and 31 passing tests. All in `/campaignops-kernel/`.
 
 ## What you need running
@@ -263,7 +263,7 @@ Wait for 17:00 or manually trigger `08_daily_summary` in n8n.
 
 | Repo/Tool | Used now? | When / How |
 |-----------|-----------|------------|
-| **n8n** | YES | All 8 workflows in `workflows/` |
+| **n8n** | YES | All 10 workflows in `workflows/` |
 | **Mautic** | NO | Phase C — nurture journeys only |
 | **Firecrawl** | NO | Phase B — company enrichment, NOT scraping |
 | **Fire Enrich** | NO | Phase B — enrichment pattern reference |
@@ -287,7 +287,7 @@ Wait for 17:00 or manually trigger `08_daily_summary` in n8n.
 |------|------|
 | Supabase schema + seed | 20 min |
 | FastAPI deploy | 10 min |
-| n8n + credentials + 8 workflows | 30 min |
+| n8n + credentials + 10 workflows | 30 min |
 | Smartlead campaign + webhook | 30 min |
 | OpenAI key | 5 min |
 | Calendly | 5 min |
@@ -300,7 +300,7 @@ Wait for 17:00 or manually trigger `08_daily_summary` in n8n.
 
 - [ ] Schema applied to Supabase
 - [ ] FastAPI /health returns OK
-- [ ] n8n running, all 8 workflows imported
+- [ ] n8n running, all 10 workflows imported
 - [ ] Smartlead campaign created, webhook points to n8n
 - [ ] First lead imported and scored
 - [ ] First draft generated, passed compliance

@@ -28,6 +28,8 @@ WORKFLOW_NAMES = [
     "06_reply_classifier",
     "07_sla_monitor",
     "08_daily_summary",
+    "09_outlook_bookings",
+    "10_experiment_tracker",
 ]
 
 BOLD = "\033[1m"; GREEN = "\033[92m"; YELLOW = "\033[93m"

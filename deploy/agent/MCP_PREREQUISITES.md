@@ -97,7 +97,7 @@ Set `OPENAI_API_KEY` to the OpenRouter key and optionally set
 
 ### 5. n8n Workflow Import
 
-**Why:** Import the 8 pre-built workflow JSONs.
+**Why:** Import the 10 pre-built workflow JSONs.
 
 **No dedicated MCP server.** Options:
 1. **n8n REST API** — `POST /api/v1/workflows` with the JSON body

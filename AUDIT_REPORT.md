@@ -12,10 +12,10 @@
 | Reply classifier | B | Ordering sensitivity; 1 false-positive in 8 replies; good overall |
 | SLA engine | A | Clean, well-calibrated |
 | Draft generator | B | Template matching works; personalization is basic (V1 appropriate) |
-| API | B+ | 24 endpoints; missing Supabase-backed GET endpoints |
-| Tests | B | 46 tests pass; coverage gaps in edge cases |
+| API | B+ | 29 endpoints; missing Supabase-backed GET endpoints |
+| Tests | B | 58 tests pass; coverage gaps in edge cases |
 | Deployment | A- | Playbook complete; n8n auto-import script untested against live n8n |
-| Git | A | 8 clean commits, 71 files tracked |
+| Git | A | 12 clean commits, 89 files tracked |
 
 ### FIXES APPLIED IN THIS AUDIT
 

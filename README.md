@@ -80,7 +80,7 @@ campaignops-kernel/
 │   ├── analytics/         Daily summary agent
 │   ├── integrations/      Smartlead, HubSpot, n8n, Mautic, Firecrawl
 │   └── shared/            Pydantic models + enums
-├── workflows/             8 n8n workflows (detailed JSON)
+├── workflows/             10 n8n workflows (detailed JSON)
 ├── db/                    Migrations + seed data
 └── tests/                 3 test files, 31 checks
 ```

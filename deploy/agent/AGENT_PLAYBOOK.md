@@ -765,7 +765,7 @@ Before sending to real leads, verify:
 ☐ Reply webhook URL is publicly reachable
 ☐ Daily summary email arriving (test by manual trigger)
 ☐ Metabase dashboard shows real data
-☐ All 8 n8n workflows are Active
+☐ All 10 n8n workflows are Active
 ```
 
 ---
