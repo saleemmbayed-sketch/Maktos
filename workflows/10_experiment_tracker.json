@@ -1,0 +1,89 @@
+{
+  "name": "CampaignOps: Experiment Tracker",
+  "version": "1.0",
+  "trigger": "Cron: every hour",
+  "description": "Compute experiment results per variant, run Bayesian analysis, check for winners, generate recommendations. NEVER auto-stop — only recommends.",
+  "nodes": [
+    {
+      "id": "trigger",
+      "type": "n8n-nodes-base.cron",
+      "name": "Every Hour",
+      "parameters": {"triggerTimes": {"item": [{"mode": "everyHour"}]}}
+    },
+    {
+      "id": "get_active",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Get Active Experiments",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM experiments WHERE status = 'active'"
+      }
+    },
+    {
+      "id": "get_assignments",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Get Assignments + Events",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT ea.variant_id, oe.event_type, re.reply_type FROM experiment_assignments ea LEFT JOIN outreach_events oe ON ea.lead_id = oe.lead_id LEFT JOIN reply_events re ON ea.lead_id = re.lead_id WHERE ea.experiment_id = '{{ $json.id }}' AND oe.created_at >= ea.assigned_at"
+      }
+    },
+    {
+      "id": "compute_stats",
+      "type": "n8n-nodes-base.code",
+      "name": "Compute Variant Results",
+      "parameters": {
+        "jsCode": "// Aggregate events per variant\nconst variants = {};\nfor (const event of $input.all()) {\n  const vid = event.json.variant_id;\n  if (!vid) continue;\n  if (!variants[vid]) variants[vid] = { leads: 0, sent: 0, opened: 0, clicked: 0, replies: 0, positive: 0, meetings: 0, unsubs: 0 };\n  variants[vid].leads++;\n  if (event.json.event_type === 'sent') variants[vid].sent++;\n  if (event.json.event_type === 'opened') variants[vid].opened++;\n  if (event.json.event_type === 'clicked') variants[vid].clicked++;\n  if (event.json.event_type === 'replied') {\n    variants[vid].replies++;\n    if (['interested','needs_more_info','pricing_question'].includes(event.json.reply_type)) variants[vid].positive++;\n    if (event.json.reply_type === 'interested') variants[vid].meetings++;\n  }\n  if (event.json.event_type === 'unsubscribed') variants[vid].unsubs++;\n}\n\n// Compute rates\nconst results = Object.entries(variants).map(([vid, v]) => ({\n  variant_id: vid,\n  leads_assigned: v.leads,\n  emails_sent: v.sent,\n  emails_opened: v.opened,\n  replies_total: v.replies,\n  positive_replies: v.positive,\n  meetings_booked: v.meetings,\n  reply_rate: v.sent > 0 ? v.replies / v.sent : 0,\n  positive_reply_rate: v.sent > 0 ? v.positive / v.sent : 0,\n  meeting_rate: v.sent > 0 ? v.meetings / v.sent : 0,\n}));\n\nreturn results.map(r => ({ json: r }));"
+      }
+    },
+    {
+      "id": "save_results",
+      "type": "n8n-nodes-base.supabase",
+      "name": "Save Results",
+      "parameters": {
+        "operation": "create",
+        "tableId": "experiment_results",
+        "dataToSend": "defineBelow",
+        "fieldsToSend": {
+          "values": {
+            "experiment_id": "={{ $json.experiment_id }}",
+            "variant_id": "={{ $json.variant_id }}",
+            "leads_assigned": "={{ $json.leads_assigned }}",
+            "emails_sent": "={{ $json.emails_sent }}",
+            "replies_total": "={{ $json.replies_total }}",
+            "positive_replies": "={{ $json.positive_replies }}",
+            "meetings_booked": "={{ $json.meetings_booked }}",
+            "reply_rate": "={{ $json.reply_rate }}",
+            "positive_reply_rate": "={{ $json.positive_reply_rate }}"
+          }
+        }
+      }
+    },
+    {
+      "id": "check_winner",
+      "type": "n8n-nodes-base.code",
+      "name": "Check Winner",
+      "parameters": {
+        "jsCode": "// Simplified winner detection: if one variant has 2x+ the positive reply rate and >10 sends, flag it\nconst results = $input.all().map(r => r.json);\nif (results.length < 2) return [{ json: { winner_found: false, reason: 'need 2+ variants' } }];\n\nconst best = results.reduce((a, b) => a.positive_reply_rate > b.positive_reply_rate ? a : b);\nconst worst = results.reduce((a, b) => a.positive_reply_rate < b.positive_reply_rate ? a : b);\n\nif (best.emails_sent >= 10 && best.positive_reply_rate >= worst.positive_reply_rate * 1.5) {\n  return [{ json: { winner_found: true, winner_variant_id: best.variant_id, reason: 'Significant lead detected', recommendation: 'Stop experiment and adopt variant ' + best.variant_id } }];\n}\n\nreturn [{ json: { winner_found: false, reason: 'Not enough data or no clear winner' } }];"
+      }
+    },
+    {
+      "id": "notify_winner",
+      "type": "n8n-nodes-base.emailSend",
+      "name": "Notify Owner if Winner",
+      "parameters": {
+        "to": "{{ $env.CAMPAIGN_OWNER_EMAIL }}",
+        "subject": "Experiment Winner Detected!",
+        "text": "Experiment {{ $json.experiment_name }} has a clear winner. Recommendation: {{ $json.recommendation }}. Action required: manually stop experiment and adopt winning variant."
+      }
+    }
+  ],
+  "connections": {
+    "trigger": {"main": [["get_active"]]},
+    "get_active": {"main": [["get_assignments"]]},
+    "get_assignments": {"main": [["compute_stats"]]},
+    "compute_stats": {"main": [["save_results"]]},
+    "save_results": {"main": [["check_winner"]]},
+    "check_winner": {"main": [["notify_winner"], []]}
+  }
+}

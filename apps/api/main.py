@@ -410,6 +410,71 @@ def get_campaign_metrics(campaign_id: UUID):
     }
 
 
+
+# ═══════════════════════════════════════════════════════════════════
+# PHASE E — EXPERIMENTS & A/B TESTING
+# ═══════════════════════════════════════════════════════════════════
+
+class CreateExperimentRequest(BaseModel):
+    campaign_id: UUID
+    name: str
+    hypothesis: str = ""
+    metric: str = "positive_reply_rate"
+    variants: list[dict] = []
+    sample_size_target: int = 100
+    significance_threshold: float = 0.90
+
+@app.post("/experiments/create")
+def create_experiment(request: CreateExperimentRequest):
+    return {
+        "experiment_id": str(uuid4()),
+        "name": request.name,
+        "variants": len(request.variants),
+        "metric": request.metric,
+        "status": "draft",
+        "note": "Variant traffic splits must sum to 1.0",
+    }
+
+class AssignVariantRequest(BaseModel):
+    experiment_id: UUID
+    lead_id: UUID
+
+@app.post("/experiments/assign")
+def assign_lead_to_variant(request: AssignVariantRequest):
+    from experiments.engine import assign_variant
+    variants = [{"id": uuid4(), "traffic_split": 0.5}, {"id": uuid4(), "traffic_split": 0.5}]
+    variant_id = assign_variant(request.experiment_id, request.lead_id, variants)
+    return {
+        "experiment_id": str(request.experiment_id),
+        "lead_id": str(request.lead_id),
+        "variant_id": str(variant_id),
+        "assignment_method": "deterministic_hash",
+    }
+
+@app.get("/experiments/recommendations")
+def get_experiment_recommendations():
+    from experiments.engine import generate_daily_recommendations
+    recs = generate_daily_recommendations([], [])
+    return {
+        "recommendations": recs,
+        "note": "Recommendations only. Human decides strategy changes.",
+    }
+
+@app.get("/experiments/sample-size")
+def estimate_sample_size_endpoint(
+    baseline_rate: float = 0.05,
+    minimum_effect: float = 0.02,
+):
+    from experiments.engine import estimate_sample_size
+    n = estimate_sample_size(baseline_rate, minimum_effect)
+    return {
+        "per_variant": n,
+        "total": n * 2,
+        "baseline_rate": baseline_rate,
+        "minimum_detectable_effect": minimum_effect,
+    }
+
+
 # ═══════════════════════════════════════════════════════════════════
 # PARDOT SYNC (Phase B/C — replaces HubSpot)
 # ═══════════════════════════════════════════════════════════════════
